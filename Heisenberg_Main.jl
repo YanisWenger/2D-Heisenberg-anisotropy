@@ -1,0 +1,96 @@
+using Plots, Distributions, Colors, Base.Threads, Dierckx, LsqFit, Random, JLD2   # To plot, To have random distrib of spin, colors for lattices, parallelize, interpolate, Random, save data in compact file
+include("./Heisenberg_functions.jl")
+
+N = 20_000 # Lattice flip
+# T = unique(sort(Float32.(vcat(collect(0.955:.015:1.21),collect(.1:.1:.5),collect(.56:.04:.92),collect(1.24:.04:1.64),collect(1.7:.1:2))))) # XY
+T = Float32.(collect(.1:.25:2))            # Temperature
+# T = unique(sort(Float32.(vcat(collect(.6:.1:1.6),collect(.7:.05:1.4), collect(1.:.025:1.2)))))
+L = [8,12]           # Lattice size
+# L = [8,12,20,32,50,70,100]
+Δ    = Float32.([0,1])
+# Δ = Float32.([-100,-5,-.3,0,.3,5,100])
+p = .6
+burn = Int(min(N/4,100000))    # Burning period
+PBC   = true                    # Periodic Boundary Conditions
+pi32  = Float32(π)
+Save  = true
+
+# --------------------------------------------------------------- #
+
+println("  --  $N sweeps  --  ")
+starttime = time()
+for z in eachindex(Δ)
+    for l in eachindex(L)
+        Threads.@threads for t in eachindex(T)
+            Energy, Mag = MH(Initial_lattice(L[l], pi32), L[l], N, T[t], burn, pi32, L, Δ[z], .5, Save) # zeros(Float32, L[l],L[l])
+            println("T = $(T[t]) \tL = $(L[l]) \tΔz = $(Δ[z]) \tE = ", Energy, "\t Mag : ", Mag)
+        end
+    end
+end
+t = round(Int, time()-starttime)
+if Save == true
+    open("Data/$(L)_$N/elapsed_time.txt", "w") do file; write(file, "$t\n$Δ\n$T"); end
+end
+
+
+println(t)
+
+# a,b,c,d,e,f,g,h,i,j,k = MHvideo(rand(Float32, 40, 40)*2*pi32, 40, 2000, .2, Nbin, 200, pi32, PBC) # zeros(L[l],L[l])
+# println("    E = ", round(a;digits=4), " ± ", round(b;digits=4), "    Mag = ", round(c;digits=4), " ± ", round(d;digits=4), "    Suscept: ", round(e;digits=5), " ± ", round(f;digits=6), "    C = ", round(g;digits=7), " ± ", round(h;digits=7), "    accept ", round(k;digits=3))
+# COLOR MAP !!!
+
+
+#=
+200000   48T   8,10,12,14,16,20    58min
+200000   48T   8,12,20             29min   -> 18'
+
+200_000   8T   8                    17 (skip 10), 21 (skip 1)
+1_000_000 8T   8                    1'33 (skip=10)
+=#
+
+
+
+m=12
+lattice = Initial_lattice(m, pi32)
+E = MH(lattice, m, 4000, .2f0, 200, pi32, L, 0, p, false)
+heatmap(matrixcolor(lattice, m), aspect_ratio = 1, size = (400,400), colormap = :coolwarm, legend = false, framestyle=:box, title = "T = 0.2")
+Energy(lattice, m, PBC, 0)/m^2
+
+
+a,b,c,d#=,e,f,g,h,i,j=#,k = MHvideo(lattice, m, 400, .2f0, 20, 300, pi32, PBC, 0, p) # zeros(L[l],L[l])
+println("E = ", a, " ± ", b, "\t M = ", c, " ± ", d, "\t acceptance: ", k)
+
+
+# The energy is not very accurate, do we need more ?
+
+# Pouvoir tune Delta theta indépendamment : tunable coef<1 ? theta_new = (theta_new - theta_old)*coef + theta_old       Tune independently theta and phi => no more isotropic, even the isingflip brakes isotropy
+# Use the same z repatition of the "function Initial_lattice" and no more spherical -> spherical ?          Gaussian multiplied by sqrt(1-z2)
+
+
+# For low temperature from High temperature to low      done
+
+# verify the limit (Tbkt for xy, Tc for ising (with susceptibility))
+
+# cluster update (wolf algo)
+
+
+x = collect(-1:.01:1)
+y = sqrt.(1 .-x.^2)
+z = ℯ.^(-10*(x .- 1/sqrt(2)).^2)
+yz = sqrt.(1 .-x.^2) .* ℯ.^(-10*(x .- 1/sqrt(2)).^2)
+
+plot(x,y)
+plot!(x,z)
+plot!(x,yz)
+
+a = [[1,2],[3,2]]
+b = [[1,2,3],[4,5,6],[7,8,9]]
+
+for n in a
+    println(n)
+    # a,b = n
+    # println(b[a,b])
+end
+
+
+# check susceptibility and capacity, Ising until T=3

@@ -1,0 +1,16 @@
+function MultipleIsingFlips(Lattice, L, T, E0, pi32, Δz, PBC)      # Wolff update
+    R = min(rand(TaskLocalRNG(), 1:6), round(Int,L/4-1))
+    k, l = rand(TaskLocalRNG(), 1:L, 2)
+    newLattice = Lattice
+    for i=k-R:k+R
+        for j=l-R:l+R
+            newLattice[2, mod(i-1,L)+1, mod(j-1,L)+1] = pi32 - Lattice[2, mod(i-1,L)+1, mod(j-1,L)+1]
+        end
+    end
+    E1 = Energy(newLattice, L, PBC, Δz)
+    Δ = (E1 - E0)/(4*R^2) # check the difference energy per site
+    acceptance=true
+    E = E1
+    return newLattice, acceptance, E
+end
+
