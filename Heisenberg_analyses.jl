@@ -54,5 +54,5 @@ for i=1:length(Δ)
 end
 println(α, "\n", σα, "\n\n", γ, "\n", σγ)
 
-ξ, σξ = critlength(T, Corrmean, 1.0, false)
+ξ, σξ = critlength(T, Corrmean, 1.0, false) # shouldn t work for now
 
