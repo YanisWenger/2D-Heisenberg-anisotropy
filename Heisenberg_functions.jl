@@ -51,7 +51,7 @@ function SingleFlip(Lattice, i, j, T, L, σ, pi32, PBC, Δz, p)      # Propose a
     return Lattice[:,i,j], ΔE, acceptance, Whichflip
 end
 
-function NewSpin(spin, σ, pi32, p)
+function NewSpin(spin, σ, pi32, p) # propose a new spin
     Whichflip = rand(TaskLocalRNG()) < p
     if Whichflip == true
         spin[2] = pi32 - spin[2]
@@ -64,33 +64,34 @@ function NewSpin(spin, σ, pi32, p)
     return spin, Whichflip+1
 end
 
-function MultipleIsingFlips(Lattice, L, T, E0, pi32, Δz, PBC)      # Wolff update
+function MultipleIsingFlips(Lattice, L, T, pi32, Δz, PBC)      # Wolff update
     p = 1 - ℯ^(-2/T) # what should we do about Δ ?
     k, l = rand(TaskLocalRNG(), 1:L, 2)
-    Cluster = [[k,l]]
     InCluster = falses(L,L)
     InCluster[k,l] = true
     CheckNeighbor = [[k,l]]
     while CheckNeighbor != []
         i,j = pop!(CheckNeighbor)
-        WhichToAdd = AddNeighbor(i,j, InCluster, p, Lattice[:,:,2],pi32) # check first i-1,j; then i,j-1; i+1,j and finally i,j+1
+        NewCheckNeighbor, InCluster = AddNeighbors(i,j, L, InCluster, p, Lattice[2,:,:],pi32) # check first i-1,j; then i,j-1; i+1,j and finally i,j+1
+        CheckNeighbor = unique(vcat(CheckNeighbor,NewCheckNeighbor))
     end
-    E = Energy(newLattice, L, PBC, Δz)
-    return newLattice, acceptance, E
+    Lattice[2,:,:] = InCluster .* (pi32 .- Lattice[2,:,:]) .+ .!InCluster .* Lattice[2,:,:]
+    E = Energy(Lattice, L, PBC, Δz)
+    return Lattice, E
 end
 
-function AddOrNot(i,j, InCluster, p, Latticez,pi32)
-    WhichToAdd = falses(4)
-    Zsign = sign(Latticez[i,j]-pi32/2)
-    for n in [[i-1,j],[i,j-1],[i+1,j],[i,j+1]]
-        if InCluster[i-1,j] == false && sign(Latticez[i-1,j]-pi32/2) == Zsign
-            if rand(TaskLocalRNG()) < p
-                InCluster[i-1,j] = 1
-                push!(CheckNeighbor, [i-1,j])
-                WhichToAdd[1] = true
-            end
+function AddNeighbors(i,j, L, InCluster, p, ZLattice, pi32)    # add or not to the cluster the neighbors of a site already in the cluster
+    NewCheckNeighbor = []
+    Zsign = sign(ZLattice[i,j]-pi32/2)
+    neighbor = [[mod(i-2,L)+1,j],[i,mod(j-2,L)+1],[mod(i,L)+1,j],[i,mod(j,L)+1]]    # The four neighbors
+    for n=1:4                                       # To check the four neighbors
+        k,l = neighbor[n]
+        if InCluster[k,l] == false && sign(ZLattice[k,l]-pi32/2) == Zsign && rand(TaskLocalRNG()) < p
+            InCluster[k,l] = true
+            push!(NewCheckNeighbor, [k,l])
         end
     end
+    return NewCheckNeighbor, InCluster
 end
 
 function MHvideo(Lattice, L, N, T, Nbin, burn, pi32, PBC, Δz, p)     # Sampler
@@ -114,9 +115,7 @@ function MHvideo(Lattice, L, N, T, Nbin, burn, pi32, PBC, Δz, p)     # Sampler
         else; T0 = T
         end
         # if mod(i,400)==0# && IsingFlip==true
-        #     Lattice, b, Energies[1] = MultipleIsingFlips(Lattice, L, T, Energies[1], pi32, Δz, PBC)
-        #     acceptance[3] += b
-        #     Try[3] += 1
+        #     Lattice, Energies[1] = MultipleIsingFlips(Lattice, L, T, pi32, Δz, PBC)
         # else
             for j=1:L
                 for k=1:L
@@ -212,9 +211,7 @@ function MH(Lattice, L, N, T, burn, pi32, AllLattices, Δz, p, Save, Skip=10)   
         else; T0 = T
         end
         # if mod(i,2000)==0 && IsingFlip==true
-        #     Lattice, b, E = MultipleIsingFlips(Lattice, L, T, E, pi32, Δz, PBC)
-        #     acceptance[3] += b
-        #     Try[3] += 1
+        #     Lattice, E = MultipleIsingFlips(Lattice, L, T, pi32, Δz, PBC)
         # else
             for j=1:L
                 for k=1:L
@@ -450,7 +447,7 @@ function critlength(T, data, t, ln=false) # Calculate critical exp or correlatio
 end
 
 # α : specific heat                     Ising : 0       XY : NOP Essential singularity
-# β : zero field mag                    Ising : 1/8     XY : NOP No magnetization (To have a nonzero 𝑀, the correlation function must approach a constant at large distance. But in the 2D XY model: For 𝑇>𝑇BKT: correlations decay exponentially. For 𝑇<𝑇BKT: correlations decay as a power law:)
+# β : zero field mag                    Ising : 1/8     XY : NOP No magnetization (To have a nonzero 𝑀, the correlation function must approach a constant at large distance. But in the 2D XY model: For 𝑇>𝑇BKT: correlations decay exponentially. For 𝑇<𝑇BKT: correlations decay as a power law)
 # γ : zero field isothermal suscxx      Ising : 7/4     XY : NOP Essential divergence
 # δ : Critical isothermal               Ising : 15      XY : 15
 # ν : corr length                       Ising : 1       XY : NOP 𝜉 diverges exponentially
