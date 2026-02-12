@@ -109,14 +109,14 @@ function MHvideo(Lattice, L, N, T, Nbin, burn, pi32, PBC, Δz, p)     # Sampler
     for i=1:(burn-1)                   # Calculate the energy at each flip
         AcceptanceLoop = [0,0]
         TryLoop = [0,0]
-        IsingFlip = mean(cos.(Lattice[2,:,:]).^2) > .75       # require that in average [theta < pi/6 or theta > 5 pi/6] to have the possibility (with proba p) to Ising-flip
+        IsingFlip = mean(cos.(Lattice[2,:,:]).^2) > .75     # require that in average [theta < pi/6 or theta > 5 pi/6] to have the possibility (with proba p) to Ising-flip
         if T0 > T
             T0 = 1.3f0*(1f0 - Float32(i/burn))
         else; T0 = T
         end
-        # if mod(i,400)==0# && IsingFlip==true
-        #     Lattice, Energies[1] = MultipleIsingFlips(Lattice, L, T, pi32, Δz, PBC)
-        # else
+        if mod(i,40)==0 && IsingFlip==true                   # Wolff algorithm
+            Lattice, Energies[1] = MultipleIsingFlips(Lattice, L, T, pi32, Δz, PBC)
+        else
             for j=1:L
                 for k=1:L
                     Lattice[:,j,k], ΔE, a, Whichflip = SingleFlip(Lattice,j,k,T0,L,σ,pi32, PBC, Δz, p*IsingFlip)
@@ -128,27 +128,32 @@ function MHvideo(Lattice, L, N, T, Nbin, burn, pi32, PBC, Δz, p)     # Sampler
             acceptance += AcceptanceLoop
             Try += TryLoop
             σ *= 2*AcceptanceLoop[1]/TryLoop[1]     # if the acceptance is higher than .5, sigma should increase else to be decreased to explore more the phasespace
-        # end
+        end
         if mod(i,Int(N/200))==0
             push!(Lattices, copy(Lattice))
         end
     end
+    println("end of burning phase : $burn / $N")
     for i=burn:N                       # 2nd for loop to optimize the code, to not push useless values in vectors
         E=Energies[i-burn+1]
         AcceptanceLoop = [0,0]
         TryLoop = [0,0]
         IsingFlip = mean(cos.(Lattice[2,:,:]).^2) > .75       # require that in average [theta < pi/6 or theta > 5 pi/6] to have the possibility (with proba p) to Ising-flip
-        for j=1:L
-            for k=1:L
-                Lattice[:,j,k], ΔE, a, Whichflip = SingleFlip(Lattice,j,k,T,L,σ,pi32, PBC, Δz, p*IsingFlip)
-                AcceptanceLoop[Whichflip]+=a
-                TryLoop[Whichflip]+=1
-                E+=ΔE
+        if mod(i,40)==0 && IsingFlip==true                # Wolff algorithm
+            Lattice, E = MultipleIsingFlips(Lattice, L, T, pi32, Δz, PBC)
+        else
+            for j=1:L
+                for k=1:L
+                    Lattice[:,j,k], ΔE, a, Whichflip = SingleFlip(Lattice,j,k,T,L,σ,pi32, PBC, Δz, p*IsingFlip)
+                    AcceptanceLoop[Whichflip]+=a
+                    TryLoop[Whichflip]+=1
+                    E+=ΔE
+                end
             end
+            acceptance += AcceptanceLoop
+            Try += TryLoop
+            σ *= 2*AcceptanceLoop[1]/TryLoop[1]     # if the acceptance is higher than .5, sigma should increase else to be decreased to explore more the phasespace
         end
-        acceptance += AcceptanceLoop
-        Try += TryLoop
-        σ *= 2*AcceptanceLoop[1]/TryLoop[1]     # if the acceptance is higher than .5, sigma should increase else to be decreased to explore more the phasespace
         Energies[i-burn+2] = E
         Mag[i-burn+1] = sqrt(mean(cos(phi)*sin(theta) for phi in Lattice[1,:,:], theta in Lattice[2,:,:])^2 + mean(sin(phi)*sin(theta) for phi in Lattice[1,:,:], theta in Lattice[2,:,:])^2 + mean(cos(theta) for theta in Lattice[2,:,:])^2)
         # vor += Vortex(Lattice,pi32, PBC)
@@ -205,14 +210,14 @@ function MH(Lattice, L, N, T, burn, pi32, AllLattices, Δz, p, Save, Skip=10)   
     for i=1:burn                   # Calculate the energy at each flip
         AcceptanceLoop = [0,0]
         TryLoop = [0,0]
-        IsingFlip = mean(cos.(Lattice[2,:,:]).^2) > .75       # require that in average [theta < pi/6 or theta > 5 pi/6] to have the possibility (with proba p) to Ising-flip
-        if T0 > T
+        IsingFlip = mean(cos.(Lattice[2,:,:]).^2) > .75     # require that in average [theta < pi/6 or theta > 5 pi/6] to have the possibility (with proba p) to Ising-flip
+        if T0 > T                                           # To begin with a "high" temperature to help it converges more easily, and decrease the temperature until the wanted one
             T0 = 1.3f0*(1f0 - Float32(i/burn))
         else; T0 = T
         end
-        # if mod(i,2000)==0 && IsingFlip==true
-        #     Lattice, E = MultipleIsingFlips(Lattice, L, T, pi32, Δz, PBC)
-        # else
+        if mod(i,2000)==0 && IsingFlip==true                # Wolff algorithm
+            Lattice, E = MultipleIsingFlips(Lattice, L, T, pi32, Δz, PBC)
+        else
             for j=1:L
                 for k=1:L
                     Lattice[:,j,k], ΔE, a, Whichflip = SingleFlip(Lattice,j,k,T0,L,σ,pi32, PBC, Δz, p*IsingFlip)
@@ -224,23 +229,27 @@ function MH(Lattice, L, N, T, burn, pi32, AllLattices, Δz, p, Save, Skip=10)   
             acceptance += AcceptanceLoop
             Try += TryLoop
             σ *= 2*AcceptanceLoop[1]/TryLoop[1]     # if the acceptance is higher than .5, sigma should increase else to be decreased to explore more the phasespace
-        # end
+        end
     end
     for i=1:Nmeasurement                       # 2nd for loop to optimize the code, to not push useless values in vectors
         AcceptanceLoop = [0,0]
         TryLoop = [0,0]
         IsingFlip = mean(cos.(Lattice[2,:,:]).^2) > .75       # require that in average [theta < pi/6 or theta > 5 pi/6] to have the possibility (with proba p) to Ising-flip
-        for j=1:L
-            for k=1:L
-                Lattice[:,j,k], ΔE, a, Whichflip = SingleFlip(Lattice,j,k,T,L,σ,pi32, PBC, Δz, p*IsingFlip)
-                AcceptanceLoop[Whichflip]+=a
-                TryLoop[Whichflip]+=1
-                E+=ΔE
+        if mod(i,2000)==0 && IsingFlip==true                # Wolff algorithm
+            Lattice, E = MultipleIsingFlips(Lattice, L, T, pi32, Δz, PBC)
+        else
+            for j=1:L
+                for k=1:L
+                    Lattice[:,j,k], ΔE, a, Whichflip = SingleFlip(Lattice,j,k,T,L,σ,pi32, PBC, Δz, p*IsingFlip)
+                    AcceptanceLoop[Whichflip]+=a
+                    TryLoop[Whichflip]+=1
+                    E+=ΔE
+                end
             end
+            acceptance += AcceptanceLoop
+            Try += TryLoop
+            σ *= 2*AcceptanceLoop[1]/TryLoop[1]     # if the acceptance is higher than .5, sigma should increase else to be decreased to explore more the phasespace
         end
-        acceptance += AcceptanceLoop
-        Try += TryLoop
-        σ *= 2*AcceptanceLoop[1]/TryLoop[1]     # if the acceptance is higher than .5, sigma should increase else to be decreased to explore more the phasespace
         if mod(i, Skip) == 0                            # to not measure every lattice sweeps
             j = Int(i/Skip)
             Energies[Int(j)] = copy(E)
@@ -373,13 +382,14 @@ end
 
 function basicplotΔ(T, Δ, vect, ytitle="", error=[], i=length(vect[:,1,1]), save=false)   # read data from a file and plot it
     p=plot()
+    pal = cgrad([:blue, :red], length(Δ))
     if error != [] 
         for z in eachindex(Δ)
-            plot!(T, vect[i, :, z], yerr = Vector(error[i, :, z]), markerstrokecolor=:auto, label="$(Δ[z])", ylims=(max(0, minimum(vect[i,:,:])),maximum(vect[i,:,:])+maximum(error[i,:,:])))
+            plot!(T, vect[i, :, z], yerr = Vector(error[i, :, z]), label="$(Δ[z])", ylims=(max(0, minimum(vect[i,:,:])),maximum(vect[i,:,:])+maximum(error[i,:,:])), seriescolor = pal[z], linecolor = pal[z], markercolor = pal[z], markerstrokecolor = pal[z], ecolor = pal[z])
         end
     else
         for z in eachindex(Δ)
-            plot!(T, vect[i, :, z], label="$(Δ[z])")
+            plot!(T, vect[i, :, z], label="$(Δ[z])", seriescolor = pal[z])
         end
     end
     title!(p, ytitle*" as a function of T")
@@ -454,7 +464,18 @@ end
 
 # continuous symmetries cannot be spontaneously broken in 2D
 
-# heatmap(matrixcolor(Lattices[end]), aspect_ratio = 1, size = (375,400), colormap = :coolwarm,legend = false, framestyle=:box)
 # using DelimitedFiles; writedlm(stdout, vort)  # print matrix in a nice form
 
 # σ = .2f0 + T^1.5f0 + T^.3f0/5
+
+
+
+
+#=
+pal = cgrad([:green, :black, :orange], length(Δ))  # fixed, ordered palette
+
+for z in 1:length(Δ)
+    plot!(T, vect[i, :, z], yerr = Vector(error[i, :, z]), markerstrokecolor = :auto, label = "$(Δ[z])", ylims = (max(0, minimum(vect[i,:,:])), maximum(vect[i,:,:]) + maximum(error[i,:,:])), seriescolor = pal[z]   # ← manually pick the correct color)
+end
+
+=#

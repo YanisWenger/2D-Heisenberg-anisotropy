@@ -50,29 +50,23 @@ println(t)
 
 
 
-m=12
+m=80
 lattice = Initial_lattice(m, pi32)
 E = MH(lattice, m, 4000, .2f0, 200, pi32, L, 0, p, false)
 heatmap(matrixcolor(lattice, m), aspect_ratio = 1, size = (400,400), colormap = :coolwarm, legend = false, framestyle=:box, title = "T = 0.2")
 Energy(lattice, m, PBC, 0)/m^2
 
 
-a,b,c,d#=,e,f,g,h,i,j=#,k = MHvideo(lattice, m, 400, .2f0, 20, 300, pi32, PBC, 0, p) # zeros(L[l],L[l])
+a,b,c,d#=,e,f,g,h,i,j=#,k = MHvideo(lattice, m, 200, .2f0, 20, 60, pi32, PBC, -4, p) # zeros(L[l],L[l])
 println("E = ", a, " ± ", b, "\t M = ", c, " ± ", d, "\t acceptance: ", k)
 
 
-# The energy is not very accurate, do we need more ?
+# The energy is not very accurate, do we need more accuracy ?
 
-# Pouvoir tune Delta theta indépendamment : tunable coef<1 ? theta_new = (theta_new - theta_old)*coef + theta_old       Tune independently theta and phi => no more isotropic, even the isingflip brakes isotropy
-# Use the same z repatition of the "function Initial_lattice" and no more spherical -> spherical ?          Gaussian multiplied by sqrt(1-z2)
-
-
-# For low temperature from High temperature to low      done
+# Be able to tune Delta and Theta independently : tunable coef<1 ? theta_new = (theta_new - theta_old)*coef + theta_old       Tune independently theta and phi => no more isotropic, even the isingflip brakes isotropy ?
+# ?? Use the same z repatition of the "function Initial_lattice" and no more spherical -> spherical ?          Gaussian multiplied by sqrt(1-z2)
 
 # verify the limit (Tbkt for xy, Tc for ising (with susceptibility))
-
-# cluster update (wolf algo)
-
 
 x = collect(-1:.01:1)
 y = sqrt.(1 .-x.^2)
@@ -82,15 +76,6 @@ yz = sqrt.(1 .-x.^2) .* ℯ.^(-10*(x .- 1/sqrt(2)).^2)
 plot(x,y)
 plot!(x,z)
 plot!(x,yz)
-
-a = [[1,2],[3,2]]
-b = [[1,2,3],[4,5,6],[7,8,9]]
-
-for n in a
-    println(n)
-    # a,b = n
-    # println(b[a,b])
-end
 
 
 # check susceptibility and capacity, Ising until T=3
