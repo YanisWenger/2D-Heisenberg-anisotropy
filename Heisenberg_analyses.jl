@@ -4,14 +4,15 @@ include("./Heisenberg_functions.jl")
 N = 200_000 # Lattice flip
 # T = unique(sort(Float32.(vcat(collect(.1:.1:1.7),collect(.6:.05:1.3)))))
 # T = unique(sort(Float32.(vcat(collect(.6:.1:1.6),collect(.7:.05:1.4), collect(1.:.025:1.2)))))
+T = unique(sort(Float32.(vcat(collect(2.1:.1:2.8)))))#, collect(2.5:.1:3.3)))))
 # T = unique(sort(Float32.(vcat(collect(0.955:.015:1.21),collect(.1:.1:.5),collect(.56:.04:.92),collect(1.24:.04:1.64),collect(1.7:.1:2)))))
-T = Float32.(collect(.1:.1:2))            # Temperature
-# L = [8,12]           # Lattice size
-L=[8,12,20,32]
+# T = Float32.(collect(.1:.1:2))            # Temperature
+L = [8,12,20]           # Lattice size
+# L=[8,12,20,32]
 Nbin = 50                       # Number of bins
 PBC=true                        # Periodic Boundary Conditions
-Δ = [-100,-5,-.3,0,.3,5,100]
-# Δ = Float32.([1000])
+# Δ = [-100,-5,-.3,0,.3,5,100]
+Δ = Float32.([-1000])
 
 E, EΔ   =   zeros(Float32, length(L), length(T), length(Δ)), zeros(Float32, length(L), length(T), length(Δ))
 M, MΔ   =   zeros(Float32, length(L), length(T), length(Δ)), zeros(Float32, length(L), length(T), length(Δ))
@@ -39,9 +40,10 @@ for z in eachindex(Δ)
     end
 end
 
-basicplot1(L, T, χ, "Susc", χΔ,1) # last number for which Δ
-basicplot1(L, T, C, "C", CΔ,1)
-basicplot1(L, T, C, "C", CΔ,7)
+basicplot1(L, T, M, "M", MΔ,1) # last number for Δ[number]
+basicplot1(L, T, χ, "Susc", χΔ,1)
+basicplot1(L, T, E, "E", EΔ,1)
+basicplot1(L, T, C, "C", CΔ,)
 
 basicplotΔ(T, Δ, χ, "Susc", χΔ, 2) # last number for lattice size : L[#]
 basicplotΔ(T, Δ, C, "C", CΔ, 2)

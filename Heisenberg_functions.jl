@@ -362,8 +362,9 @@ function basicplot1(L, T, vect, ytitle="", error=[], i=1, save=false)   # read d
         xlabel!(p, "Distance (site)")
     else
         if error != [] 
+            if ytitle=="C" || ytitle=="Susc"; lim=(max(0, minimum(vect[:,:,i])),maximum(vect[:,3:end,i])+maximum(error[:,3:end,i])); else; lim = :auto; end
             for l in eachindex(L)
-                plot!(T, vect[l, :,i], yerr = Vector(error[l,:,i]), markerstrokecolor=:auto, label="$(L[l])", ylims=(max(0, minimum(vect[:,3:end,i])),maximum(vect[:,3:end,i])+maximum(error[3:end,:,i])))
+                plot!(T, vect[l, :,i], yerr = Vector(error[l,:,i]), markerstrokecolor=:auto, label="$(L[l])", ylims = lim)
             end
         else
             for l in eachindex(L)
