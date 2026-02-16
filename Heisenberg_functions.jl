@@ -1,9 +1,9 @@
-function Energy(Lattice, L, PBC, Δz)    # Calculate the Energy of a configuration
+function Energy(Lattice, L, PBC, d)    # Calculate the Energy of a configuration
     E=0
     n = PBC ? L : L-1
     for i=1:n
         for j=1:n
-            E += -Correlation(Lattice[:,i,j],Lattice[:,i,mod(j,L)+1]) - Correlation(Lattice[:,i,j],Lattice[:,mod(i,L)+1,j]) + Δz*cos(Lattice[2,i,j])^2
+            E += -Correlation(Lattice[:,i,j],Lattice[:,i,mod(j,L)+1]) - Correlation(Lattice[:,i,j],Lattice[:,mod(i,L)+1,j]) + d*cos(Lattice[2,i,j])^2
         end
     end
     return E
@@ -20,7 +20,7 @@ function Initial_lattice(L, pi32)
     return lattice
 end
 
-function SingleFlip(Lattice, i, j, T, L, σ, pi32, PBC, Δz, p, CloserTheta)      # Propose a new configuration and either accept or reject it
+function SingleFlip(Lattice, i, j, T, L, σ, pi32, PBC, d, p, CloserTheta)      # Propose a new configuration and either accept or reject it
     newspin, Whichflip = NewSpin(Lattice[:,i,j], σ, pi32, p)
     Δ = 0f0
     if CloserTheta < 1
@@ -42,7 +42,7 @@ function SingleFlip(Lattice, i, j, T, L, σ, pi32, PBC, Δz, p, CloserTheta)    
     else
         Δ += Correlation(newspin,Lattice[:,mod(i-2,L)+1,j]) - Correlation(Lattice[:,i,j],Lattice[:,mod(i-2,L)+1,j])   +   Correlation(newspin,Lattice[:,mod(i,L)+1,j]) - Correlation(Lattice[:,i,j],Lattice[:,mod(i,L)+1,j])   +   Correlation(newspin,Lattice[:,i,mod(j-2,L)+1]) - Correlation(Lattice[:,i,j],Lattice[:,i,mod(j-2,L)+1])   +   Correlation(newspin,Lattice[:,i,mod(j,L)+1]) - Correlation(Lattice[:,i,j],Lattice[:,i,mod(j,L)+1])
     end
-    Δ += Δz * (cos(Lattice[2,i,j])^2 - cos(newspin[2])^2)
+    Δ += d * (cos(Lattice[2,i,j])^2 - cos(newspin[2])^2)
     if exp(Δ/T) > rand(TaskLocalRNG())
         Lattice[:,i,j] .= [mod(newspin[1], 2*pi32), newspin[2]]
         acceptance=true
@@ -67,8 +67,8 @@ function NewSpin(spin, σ, pi32, p) # propose a new spin
     return spin, Whichflip+1
 end
 
-function MultipleIsingFlips(Lattice, L, T, pi32, Δz, PBC)      # Wolff update
-    p = 1 - ℯ^(-2/T) # what should we do about Δ ?
+function MultipleIsingFlips(Lattice, L, T, pi32, d, PBC)      # Wolff update
+    p = 1 - ℯ^(-2/T) # what should we do about d ?
     k, l = rand(TaskLocalRNG(), 1:L, 2)
     InCluster = falses(L,L)
     InCluster[k,l] = true
@@ -79,7 +79,7 @@ function MultipleIsingFlips(Lattice, L, T, pi32, Δz, PBC)      # Wolff update
         CheckNeighbor = unique(vcat(CheckNeighbor,NewCheckNeighbor))
     end
     Lattice[2,:,:] = InCluster .* (pi32 .- Lattice[2,:,:]) .+ .!InCluster .* Lattice[2,:,:]
-    E = Energy(Lattice, L, PBC, Δz)
+    E = Energy(Lattice, L, PBC, d)
     return Lattice, E
 end
 
@@ -97,14 +97,14 @@ function AddNeighbors(i,j, L, InCluster, p, ZLattice, pi32)    # add or not to t
     return NewCheckNeighbor, InCluster
 end
 
-function MHvideo(Lattice, L, N, T, Nbin, burn, pi32, PBC, Δz, p)     # Sampler
+function MHvideo(Lattice, L, N, T, Nbin, burn, pi32, PBC, d, p)     # Sampler
     T0 = 1.3f0
     σ=.25
     acceptance=[0,0]                  # around, Ising, multiflips
     Try = [0,0]
     Energies= zeros(Float32, N-burn)
     Mag  = zeros(Float32, N-burn)
-    E = Energy(Lattice, L, PBC, Δz)
+    E = Energy(Lattice, L, PBC, d)
     corr = zeros(Float32, length(RowCorr(Lattice, L, PBC)))
     Lattices=[]
     CloserTheta = Float32(1) # Be able to adjust theta and phi independently by reducing the theta difference of an old site and the proposal
@@ -118,11 +118,11 @@ function MHvideo(Lattice, L, N, T, Nbin, burn, pi32, PBC, Δz, p)     # Sampler
         else; T0 = T
         end
         if mod(i,40)==0 && IsingFlip==true                   # Wolff algorithm
-            Lattice, E = MultipleIsingFlips(Lattice, L, T, pi32, Δz, PBC)
+            Lattice, E = MultipleIsingFlips(Lattice, L, T, pi32, d, PBC)
         else
             for j=1:L
                 for k=1:L
-                    Lattice[:,j,k], ΔE, a, Whichflip = SingleFlip(Lattice,j,k,T0,L,σ,pi32, PBC, Δz, p*IsingFlip, CloserTheta)
+                    Lattice[:,j,k], ΔE, a, Whichflip = SingleFlip(Lattice,j,k,T0,L,σ,pi32, PBC, d, p*IsingFlip, CloserTheta)
                     AcceptanceLoop[Whichflip]+=a
                     TryLoop[Whichflip]+=1
                     E+=ΔE
@@ -152,7 +152,7 @@ function MHvideo(Lattice, L, N, T, Nbin, burn, pi32, PBC, Δz, p)     # Sampler
     println(typeof(Lattices))
 
     anim = @animate for j in eachindex(Lattices)
-        heatmap(matrixcolor(Lattices[j], L), aspect_ratio = 1, size = (400,400), colormap = :coolwarm, legend = false, framestyle=:box, title = "T=$T  Δ=$Δz  $(Int(j*N/200))")    
+        heatmap(matrixcolor(Lattices[j], L), aspect_ratio = 1, size = (400,400), colormap = :coolwarm, legend = false, framestyle=:box, title = "T=$T  d=$d  $(Int(j*N/200))")    
     end
     # anim = @animate for j in eachindex(Lattices)
     #     p1 = heatmap(matrixcolor(Lattices[j], L),
@@ -175,13 +175,13 @@ function MHvideo(Lattice, L, N, T, Nbin, burn, pi32, PBC, Δz, p)     # Sampler
     return mean(Energies), std(EnergyBins), mean(Mag), std(Magbin)#=, χmean, Errorpropagation(Magbin,std(Magbin))/T*L^2 #=std(χbin)=#, Cmean, Errorpropagation(EnergyBins,std(EnergyBins))/T^2*L^2, #=vor/(N-burn+1),=# corr/(N-burn+1)=#, acceptance ./ Try
 end
 
-function MH(Lattice, L, N, T, burn, pi32, AllLattices, Δz, p, Save, Skip=10)     # Sampler
+function MH(Lattice, L, N, T, burn, pi32, AllLattices, d, p, Save, Skip=10)     # Sampler
     T0 = 1.3f0
     σ=.25f0
     Nmeasurement = N - burn
     acceptance = [0,0]              # around, Ising, multiflips
     Try = [0,0]
-    E = Energy(Lattice, L, PBC, Δz)
+    E = Energy(Lattice, L, PBC, d)
     Energies = zeros(Float32, Int(Nmeasurement/Skip))
     Mag  = zeros(Float32, Int(Nmeasurement/Skip))
     # vor  = 0f0
@@ -197,11 +197,11 @@ function MH(Lattice, L, N, T, burn, pi32, AllLattices, Δz, p, Save, Skip=10)   
         else; T0 = T
         end
         if mod(i,2000)==0 && IsingFlip==true                # Wolff algorithm
-            Lattice, E = MultipleIsingFlips(Lattice, L, T, pi32, Δz, PBC)
+            Lattice, E = MultipleIsingFlips(Lattice, L, T, pi32, d, PBC)
         else
             for j=1:L
                 for k=1:L
-                    Lattice[:,j,k], ΔE, a, Whichflip = SingleFlip(Lattice,j,k,T0,L,σ,pi32, PBC, Δz, p*IsingFlip, CloserTheta)
+                    Lattice[:,j,k], ΔE, a, Whichflip = SingleFlip(Lattice,j,k,T0,L,σ,pi32, PBC, d, p*IsingFlip, CloserTheta)
                     AcceptanceLoop[Whichflip]+=a
                     TryLoop[Whichflip]+=1
                     E+=ΔE
@@ -221,7 +221,7 @@ function MH(Lattice, L, N, T, burn, pi32, AllLattices, Δz, p, Save, Skip=10)   
     end
     Energies /= !PBC*L*(L-1) + PBC*L^2
     accept = acceptance ./ Try
-    if Save==true; @save "Data/$(AllLattices)_$N/$(L)_$(T)_$(Δz).jld2" Energies Mag #=vor=# corr accept
+    if Save==true; @save "Data/$(AllLattices)_$N/$(L)_$(T)_$d.jld2" Energies Mag #=vor=# corr accept
     end
     return mean(Energies), mean(Mag)
 end
@@ -323,7 +323,9 @@ function basicplot1(L, T, vect, ytitle="", error=[], i=1, save=false)   # read d
         xlabel!(p, "Distance (site)")
     else
         if error != [] 
-            if ytitle=="C" || ytitle=="Susc"; lim=(max(0, minimum(vect[:,:,i])),maximum(vect[:,3:end,i])+maximum(error[:,3:end,i])); else; lim = :auto; end
+            if ytitle=="C" || ytitle=="Susc"; lim=(max(0, minimum(vect[:,:,i])),maximum(vect[:,3:end,i])+maximum(error[:,3:end,i]))
+            else; lim = :auto
+            end
             for l in eachindex(L)
                 plot!(T, vect[l, :,i], yerr = Vector(error[l,:,i]), markerstrokecolor=:auto, label="$(L[l])", ylims = lim)
             end
@@ -342,16 +344,21 @@ function basicplot1(L, T, vect, ytitle="", error=[], i=1, save=false)   # read d
     display(p)
 end
 
-function basicplotΔ(T, Δ, vect, ytitle="", error=[], i=length(vect[:,1,1]), save=false)   # read data from a file and plot it
+function basicplotd(T, d, vect, ytitle="", error=[], i=length(vect[:,1,1]), save=false)   # read data from a file and plot it
     p=plot()
-    pal = cgrad([:blue, :red, :yellow], length(Δ))
+    pal = cgrad([:blue, :red, :yellow], length(d))
+    rescaleE=0
     if error != [] 
-        for z in eachindex(Δ)
-            plot!(T, vect[i, :, z], yerr = Vector(error[i, :, z]), label="$(Δ[z])", ylims=(max(0, minimum(vect[i,:,:])),maximum(vect[i,:,:])+maximum(error[i,:,:])), seriescolor = pal[z], linecolor = pal[z], markercolor = pal[z], markerstrokecolor = pal[z], ecolor = pal[z])
+        if ytitle=="C"#= || ytitle=="Susc"=#; lim=(max(0, minimum(vect[:,:,i])),maximum(vect[:,3:end,i])+maximum(error[:,3:end,i]))
+        else; lim = :auto
+        end
+        for z in eachindex(d)
+            if ytitle=="E" && d[z]<0; rescaleE = d[z]; end
+            plot!(T, vect[i, :, z].-rescaleE, yerr = Vector(error[i, :, z]), label="$(d[z])", ylims=lim, seriescolor = pal[z], linecolor = pal[z], markercolor = pal[z], markerstrokecolor = pal[z], ecolor = pal[z])
         end
     else
-        for z in eachindex(Δ)
-            plot!(T, vect[i, :, z], label="$(Δ[z])", seriescolor = pal[z])
+        for z in eachindex(d)
+            plot!(T, vect[i, :, z], label="$(d[z])", seriescolor = pal[z])
         end
     end
     title!(p, ytitle*" as a function of T")
@@ -434,10 +441,10 @@ end
 
 
 #=
-pal = cgrad([:green, :black, :orange], length(Δ))  # fixed, ordered palette
+pal = cgrad([:green, :black, :orange], length(d))  # fixed, ordered palette
 
-for z in 1:length(Δ)
-    plot!(T, vect[i, :, z], yerr = Vector(error[i, :, z]), markerstrokecolor = :auto, label = "$(Δ[z])", ylims = (max(0, minimum(vect[i,:,:])), maximum(vect[i,:,:]) + maximum(error[i,:,:])), seriescolor = pal[z]   # ← manually pick the correct color)
+for z in 1:length(d)
+    plot!(T, vect[i, :, z], yerr = Vector(error[i, :, z]), markerstrokecolor = :auto, label = "$(d[z])", ylims = (max(0, minimum(vect[i,:,:])), maximum(vect[i,:,:]) + maximum(error[i,:,:])), seriescolor = pal[z]   # ← manually pick the correct color)
 end
 
 =#

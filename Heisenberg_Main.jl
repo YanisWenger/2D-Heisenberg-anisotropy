@@ -8,8 +8,8 @@ N = 1000_000 # Lattice flip
 T = unique(sort(Float32.(vcat(collect(.4:.1:1.7),collect(.6:.05:1.4), collect(.65:.025:.9))))) # XYZ
 L = [8,12,20,32]           # Lattice size
 # L = [8,12,20,32,50,70,100]
-# Δ    = Float32.([-1000])
-Δ = Float32.([-3,-1,-.3,-.1,0,.1,.5,4,100])
+# d    = Float32.([-1000])
+d = Float32.([-3,-1,-.3,-.1,0,.1,.5,4,100])
 p = .6
 burn = Int(min(N/4,100000))    # Burning period
 PBC   = true                    # Periodic Boundary Conditions
@@ -20,17 +20,17 @@ Save  = true
 
 println("  --  $N sweeps  --  ")
 starttime = time()
-for z in eachindex(Δ)
+for z in eachindex(d)
     for l in eachindex(L)
         Threads.@threads for t in eachindex(T)
-            Energy, Mag = MH(Initial_lattice(L[l], pi32), L[l], N, T[t], burn, pi32, L, Δ[z], .5, Save) # zeros(Float32, L[l],L[l])
-            println("T = $(T[t]) \tL = $(L[l]) \tΔz = $(Δ[z]) \tE = ", Energy, "\t Mag : ", Mag)
+            Energy, Mag = MH(Initial_lattice(L[l], pi32), L[l], N, T[t], burn, pi32, L, d[z], .5, Save) # zeros(Float32, L[l],L[l])
+            println("T = $(T[t]) \tL = $(L[l]) \td = $(d[z]) \tE = ", Energy, "\t Mag : ", Mag)
         end
     end
 end
 t = round(Int, time()-starttime)
 if Save == true
-    open("Data/$(L)_$N/elapsed_time.txt", "a") do file; write(file, "$t\n$Δ\n$T\n\n"); end
+    open("Data/$(L)_$N/elapsed_time.txt", "a") do file; write(file, "$t\n$d\n$T\n\n"); end
 end
 
 
