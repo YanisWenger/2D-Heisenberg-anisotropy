@@ -1,14 +1,14 @@
 using Plots, ColorSchemes, Distributions, Colors, CSV, DataFrames, Dierckx, LsqFit, Random, JLD2   # To plot, To have random distrib of spin, colors for lattices, write/read csv (CSV & DataFrames), parallelize, interpolate, save data in compact file
 include("./Heisenberg_functions.jl")
 
-N = 200_000 # Lattice flip
-# T = unique(sort(Float32.(vcat(collect(.1:.1:1.7),collect(.6:.05:1.3)))))
+N = 1040_000 # Lattice flip
+T = unique(sort(Float32.(vcat(collect(2:.1:2.7), collect(2.1:.02:2.44))))) # Ising
 # T = unique(sort(Float32.(vcat(collect(.6:.1:1.6),collect(.7:.05:1.4), collect(1.:.025:1.2)))))
-T = unique(sort(Float32.(vcat(collect(2.1:.1:2.8)))))#, collect(2.5:.1:3.3)))))
+# T = unique(sort(Float32.(vcat(collect(.1:.1:2.)))))#, collect(2.5:.1:3.3)))))
 # T = unique(sort(Float32.(vcat(collect(0.955:.015:1.21),collect(.1:.1:.5),collect(.56:.04:.92),collect(1.24:.04:1.64),collect(1.7:.1:2)))))
 # T = Float32.(collect(.1:.1:2))            # Temperature
-L = [8,12,20]           # Lattice size
-# L=[8,12,20,32]
+# L = [8,12,20]           # Lattice size
+L=[8,12,20,32]
 Nbin = 50                       # Number of bins
 PBC=true                        # Periodic Boundary Conditions
 # Δ = [-100,-5,-.3,0,.3,5,100]
@@ -43,7 +43,7 @@ end
 basicplot1(L, T, M, "M", MΔ,1) # last number for Δ[number]
 basicplot1(L, T, χ, "Susc", χΔ,1)
 basicplot1(L, T, E, "E", EΔ,1)
-basicplot1(L, T, C, "C", CΔ,)
+basicplot1(L, T, C, "C", CΔ,1)
 
 basicplotΔ(T, Δ, χ, "Susc", χΔ, 2) # last number for lattice size : L[#]
 basicplotΔ(T, Δ, C, "C", CΔ, 2)
@@ -56,5 +56,5 @@ for i=1:length(Δ)
 end
 println(α, "\n", σα, "\n\n", γ, "\n", σγ)
 
-ξ, σξ = critlength(T, Corrmean, 1.0, false) # shouldn t work for now
+ξ, σξ = critlength(T, Corr, 1.0, false) # shouldn t work for now
 

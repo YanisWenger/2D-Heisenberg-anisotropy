@@ -1,15 +1,15 @@
 using Plots, Distributions, Colors, Base.Threads, Dierckx, LsqFit, Random, JLD2   # To plot, To have random distrib of spin, colors for lattices, parallelize, interpolate, Random, save data in compact file
 include("./Heisenberg_functions.jl")
 
-N = 1040_000 # Lattice flip
+N = 1000_000 # Lattice flip
 # T = unique(sort(Float32.(vcat(collect(0.955:.015:1.21),collect(.1:.1:.5),collect(.56:.04:.92),collect(1.24:.04:1.64),collect(1.7:.1:2))))) # XY
-T = unique(sort(Float32.(vcat(collect(2:.1:2.7), collect(2.16:.02:2.44)))))
+# T = unique(sort(Float32.(vcat(collect(2:.1:2.7), collect(2.1:.02:2.44))))) # Ising
 # T = Float32.(collect(.1:.25:2))            # Temperature
-# T = unique(sort(Float32.(vcat(collect(.6:.1:1.6),collect(.7:.05:1.4), collect(1.:.025:1.2)))))
+T = unique(sort(Float32.(vcat(collect(.4:.1:1.7),collect(.6:.05:1.4), collect(.65:.025:.9))))) # XYZ
 L = [8,12,20,32]           # Lattice size
 # L = [8,12,20,32,50,70,100]
-Δ    = Float32.([-1000])
-# Δ = Float32.([-100,-5,-.3,0,.3,5,100])
+# Δ    = Float32.([-1000])
+Δ = Float32.([-3,-1,-.3,-.1,0,.1,.5,4,100])
 p = .6
 burn = Int(min(N/4,100000))    # Burning period
 PBC   = true                    # Periodic Boundary Conditions
@@ -51,14 +51,14 @@ println(t)
 
 
 
-m=80
+m=20
 lattice = Initial_lattice(m, pi32)
 E = MH(lattice, m, 4000, .2f0, 200, pi32, L, 0, p, false)
 heatmap(matrixcolor(lattice, m), aspect_ratio = 1, size = (400,400), colormap = :coolwarm, legend = false, framestyle=:box, title = "T = 0.2")
 Energy(lattice, m, PBC, 0)/m^2
 
 
-a,b,c,d#=,e,f,g,h,i,j=#,k = MHvideo(lattice, m, 200, .2f0, 20, 60, pi32, PBC, -4, p)
+a,b,c,d#=,e,f,g,h,i,j=#,k = MHvideo(lattice, m, 200, .2f0, 20, 60, pi32, PBC, -.5, p)
 println("E = ", a, " ± ", b, "\t M = ", c, " ± ", d, "\t acceptance: ", k)
 
 
