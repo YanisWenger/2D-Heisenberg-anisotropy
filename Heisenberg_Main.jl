@@ -1,12 +1,12 @@
 using Plots, Distributions, Colors, Base.Threads, Dierckx, LsqFit, Random, JLD2   # To plot, To have random distrib of spin, colors for lattices, parallelize, interpolate, Random, save data in compact file
 include("./Heisenberg_functions.jl")
 
-N = 1000_000 # Lattice flip
+N = 50_000_000 # Lattice flip
 # T = unique(sort(Float32.(vcat(collect(0.955:.015:1.21),collect(.1:.1:.5),collect(.56:.04:.92),collect(1.24:.04:1.64),collect(1.7:.1:2))))) # XY
 # T = unique(sort(Float32.(vcat(collect(2:.1:2.7), collect(2.1:.02:2.44))))) # Ising
 # T = Float32.(collect(.1:.25:2))            # Temperature
 T = unique(sort(Float32.(vcat(collect(.4:.1:1.7),collect(.6:.05:1.4), collect(.65:.025:.9))))) # XYZ
-L = [8,12,20,32]           # Lattice size
+L = [8, 12, 20]           # Lattice size
 # L = [8,12,20,32,50,70,100]
 # d    = Float32.([-1000])
 d = Float32.([-3,-1,-.3,-.1,0,.1,.5,4,100])
@@ -52,10 +52,28 @@ println(t)
 
 
 m=20
+ZM = zeros(20)
+for i=1:20
+    lattice = Initial_lattice(m, pi32)
+    E, magz, a, σ,aa, ab = MHXY(lattice, m, 4000, .2f0, 3000, pi32, L, 0.2, false)
+    ZM[i] = mean(magz)
+    println(ZM[i])
+end
+count(abs.(ZM) .> .9)
+
 lattice = Initial_lattice(m, pi32)
-E = MH(lattice, m, 4000, .2f0, 200, pi32, L, 0, p, false)
+E, magz, a, σ,sigma1, sigma2, absmagz = MHXY(lattice, m, 20000, .2f0, 0, pi32, L, .2, false)
+Energy(lattice, m, PBC, 1.32)/m^2
+E
+plot(sigma1)
+plot(sigma2)
+# plot(magz)
+plot(absmagz)
+println("\n",a)
+
+E = MH(lattice, m, 4000, .2f0, 200, pi32, L, 0.3, p, false)
 heatmap(matrixcolor(lattice, m), aspect_ratio = 1, size = (400,400), colormap = :coolwarm, legend = false, framestyle=:box, title = "T = 0.2")
-Energy(lattice, m, PBC, 0)/m^2
+Energy(lattice, m, PBC, 0.3)/m^2
 
 
 a,b,c,d#=,e,f,g,h,i,j=#,k = MHvideo(lattice, m, 200, .2f0, 20, 60, pi32, PBC, -.5, p)
@@ -79,4 +97,12 @@ plot!(x,z)
 plot!(x,yz)
 
 
-# check susceptibility and capacity, Ising until T=3
+# Parallel tempering
+# longer MH 50 000 000 : Energy at each lattice sweep at the same time than E as usual
+# self correlation time
+
+# Remove Energy2 from MH
+
+x=collect(.001:.001:1)
+y=sqrt.(abs.((asin.(2x.-1) .+1 -2*x)/(pi32/2-1))).*(sign.(x .- .5).+1)/2
+plot(x, y)
