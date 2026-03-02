@@ -38,10 +38,6 @@ function EnergyDiffPhi(spin0old, phi, spin1, spin2, spin3, spin4) # calculate on
     return sin(spin0old[2])*((cos(phi-spin1[1])-cos(phiold-spin1[1]))*sin(spin1[2])  +  (cos(phi-spin2[1])-cos(phiold-spin2[1]))*sin(spin2[2])  +  (cos(phi-spin3[1])-cos(phiold-spin3[1]))*sin(spin3[2])  +  (cos(phi-spin4[1])-cos(phiold-spin4[1]))*sin(spin4[2]))
 end
 
-function EnergyDiffTheta(spin1, theta, spin2)# spin 1 is the old one, theta is the new spin1[2], spin2 is the neighbor
-    return (sin(theta)-sin(spin1[2]))*sin(spin2[2])*cos(spin1[1]-spin2[1]) + (cos(theta)-cos(spin1[2]))*cos(spin2[2])
-end
-
 function SingleFlip(Lattice, i, j, T, L, σ, pi32, PBC, d, p, CloserTheta)      # Propose a new configuration and either accept or reject it
     newspin, Whichflip = NewSpin(Lattice[:,i,j], σ, pi32, p)
     if CloserTheta < 1
@@ -260,7 +256,7 @@ function MH(Lattice, L, N, T, burn, pi32, AllLattices, d, p, Save, Skip=10)     
     Tr = [0,0]                      # same reason as accept
     E = Energy(Lattice, L, PBC, d)
     Energies = zeros(Float32, Int(Nmeasurement/Skip))
-    Energies2 = zeros(Float32, Int(Nmeasurement/Skip))
+    # Energies2 = zeros(Float32, Int(Nmeasurement/Skip))
     Mag  = zeros(Float32, Int(Nmeasurement/Skip))
     # vor  = 0f0
     corr = zeros(length(RowCorr(Lattice, L, PBC)))
@@ -297,13 +293,12 @@ function MH(Lattice, L, N, T, burn, pi32, AllLattices, d, p, Save, Skip=10)     
             Mag[j] = sqrt(mean(cos(phi)*sin(theta) for phi in Lattice[1,:,:], theta in Lattice[2,:,:])^2 + mean(sin(phi)*sin(theta) for phi in Lattice[1,:,:], theta in Lattice[2,:,:])^2 + mean(cos(theta) for theta in Lattice[2,:,:])^2)
             # vor += Vortex(Lattice, pi32, PBC) #    ?????    No need for 3D, right ?
             corr += RowCorr(Lattice, L, PBC)
-            Energies2[j] = copy(Energy(Lattice, L, PBC, d))
+            # Energies2[j] = copy(Energy(Lattice, L, PBC, d))/(!PBC*L*(L-1) + PBC*L^2)
         end
     end
     Energies /= !PBC*L*(L-1) + PBC*L^2
-    Energies2 /= !PBC*L*(L-1) + PBC*L^2
     accept = acceptance ./ Try
-    if Save==true; @save "Data/$(AllLattices)_$N/$(L)_$(T)_$d.jld2" Energies Mag #=vor=# corr accept Energies2
+    if Save==true; @save "Data/$(AllLattices)_$N/$(L)_$(T)_$d.jld2" Energies Mag #=vor=# corr accept# Energies2
     end
     return mean(Energies), mean(Energies2), mean(Mag)
 end
@@ -625,7 +620,7 @@ function MeanCorrTime(Lattices)
     L = length(Lattices[1][:,1,1])
     n = length(Lattices)
     Corr = zeros(n-1)
-    for k=1#:n-1
+    for k=1:n-1
         for l=k+1:n
             C = 0
             for i=1:L
@@ -633,7 +628,7 @@ function MeanCorrTime(Lattices)
                     C += Correlation(Lattices[k][:,i,j],Lattices[l][:,i,j])
                 end
             end
-            Corr[l-k] += abs(C)#/(n-l+k)
+            Corr[l-k] += abs(C)/(n-l+k)
         end
     end
     return Corr*L^(-2)
