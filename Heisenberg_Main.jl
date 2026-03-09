@@ -10,13 +10,13 @@ L = [8, 12, 20]           # Lattice size
 # L = [8,12,20,32,50,70,100]
 # d    = Float32.([-1000])
 d = Float32.([-3,-1,-.3,-.1,0,.1,.5,4,100])
-p = .6
+p = .6f0
 burn = Int(min(N/4,100000))    # Burning period
 PBC   = true                    # Periodic Boundary Conditions
 pi32  = Float32(π)
 Save  = true
 
-# --------------------------------------------------------------- #
+# ---------------------------   Old one   ------------------------------------ #
 
 println("  --  $N sweeps  --  ")
 starttime = time()
@@ -32,7 +32,6 @@ t = round(Int, time()-starttime)
 if Save == true
     open("Data/$(L)_$N/elapsed_time.txt", "a") do file; write(file, "$t\n$d\n$T\n\n"); end
 end
-
 
 println(t)
 
@@ -71,6 +70,7 @@ plot(sigma2)
 plot(absmagz)
 println("\n",a)
 
+lattice = Initial_lattice(m, pi32)
 E = MH(lattice, m, 4000, .2f0, 200, pi32, L, 0.3, p, false)
 heatmap(matrixcolor(lattice, m), aspect_ratio = 1, size = (400,400), colormap = :coolwarm, legend = false, framestyle=:box, title = "T = 0.2")
 Energy(lattice, m, PBC, 0.3)/m^2
@@ -85,7 +85,6 @@ println("E = ", a, " ± ", b, "\t M = ", c, " ± ", d, "\t acceptance: ", k)
 # Be able to tune Delta and Theta independently : tunable coef<1 ? theta_new = (theta_new - theta_old)*coef + theta_old       Tune independently theta and phi => no more isotropic, even the isingflip brakes isotropy ?
 # ?? Use the same z repartition of the "function Initial_lattice" and no more spherical -> spherical ?          Gaussian multiplied by sqrt(1-z2)
 
-# verify the limit (Tbkt for xy, Tc for ising (with susceptibility))
 
 x = collect(-1:.01:1)
 y = sqrt.(1 .-x.^2)
@@ -98,11 +97,32 @@ plot!(x,yz)
 
 
 # Parallel tempering
-# longer MH 50 000 000 : Energy at each lattice sweep at the same time than E as usual
-# self correlation time
 
 # Remove Energy2 from MH
 
 x=collect(.001:.001:1)
 y=sqrt.(abs.((asin.(2x.-1) .+1 -2*x)/(pi32/2-1))).*(sign.(x .- .5).+1)/2
 plot(x, y)
+
+
+# --- New one with parallel tempering --- #
+
+
+N=20000
+L=[8,12]
+T=Float32.([.2,.7,1.1,1.6])
+d=Float32.([0,2])
+
+println("  --  $N sweeps  --  ")
+starttime = time()
+for z in d
+    for l in L
+        E1, M1 = MH_parallel_tempering(l, N, T, burn, pi32, L, z, p, Save)
+    end
+end
+t = round(Int, time()-starttime)
+if Save == true
+    open("Data/$(L)_$N/elapsed_time.txt", "a") do file; write(file, "$t\n$d\n$T\n\n"); end
+end
+
+println(t)

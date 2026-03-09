@@ -1,4 +1,13 @@
-function Energy(Lattice, L, PBC, d)    # Calculate the Energy of a configuration
+mutable struct Replica
+    Lattice::Array{Float32,3}
+    E::Float32          # Instantaneous
+    T::Float32
+    σ::Float32          # Instantaneous
+    Acceptance::Vector{Int64}   # History
+    Try::Vector{Int64}          # History
+end
+
+function Energy(Lattice::Array{Float32, 3}, L::Int, PBC::Bool, d::Float32)    # Calculate the Energy of a configuration
     E=0
     n = PBC ? L : L-1
     for i=1:n
@@ -9,18 +18,18 @@ function Energy(Lattice, L, PBC, d)    # Calculate the Energy of a configuration
     return E
 end
 
-function Initial_lattice(L, pi32)
+function Initial_lattice(L::Int, pi32::Float32)
     lattice = Array{Float32}(undef, 2, L, L)
     lattice[1, :, :] .= 2*pi32*rand(TaskLocalRNG(), Float32, L, L)
     lattice[2, :, :] .= acos.(1 .- 2*rand(TaskLocalRNG(), Float32, L, L))
     return lattice
 end
 
-function Correlation(spin1, spin2)
+function Correlation(spin1::Vector, spin2::Vector)
     return sin(spin1[2])*sin(spin2[2])*cos(spin1[1]-spin2[1]) + cos(spin1[2])*cos(spin2[2])  
 end
 
-function EnergyDiff(spin0old, spin0new, spin1, spin2, spin3, spin4, d) # calculate once sin and cos of old and new spin instead of 4, and once spin and cos of spin2-3-4-5 instead if 2
+function EnergyDiff(spin0old::Vector, spin0new::Vector, spin1::Vector, spin2::Vector, spin3::Vector, spin4::Vector, d::Float32) # calculate once sin and cos of old and new spin instead of 4, and once spin and cos of spin2-3-4-5 instead if 2
     sold, snew = sin(spin0old[2]), sin(spin0new[2])
     cold, cnew = cos(spin0old[2]), cos(spin0new[2])
     return (snew*cos(spin0new[1]-spin1[1]) - sold*cos(spin0old[1]-spin1[1]))*sin(spin1[2]) + (cnew-cold)*cos(spin1[2])  +  (snew*cos(spin0new[1]-spin2[1]) - sold*cos(spin0old[1]-spin2[1]))*sin(spin2[2]) + (cnew-cold)*cos(spin2[2])  +  (snew*cos(spin0new[1]-spin3[1]) - sold*cos(spin0old[1]-spin3[1]))*sin(spin3[2]) + (cnew-cold)*cos(spin3[2])  +  (snew*cos(spin0new[1]-spin4[1]) - sold*cos(spin0old[1]-spin4[1]))*sin(spin4[2]) + (cnew-cold)*cos(spin4[2])   +   d*(cold^2-cnew^2)
@@ -38,11 +47,8 @@ function EnergyDiffPhi(spin0old, phi, spin1, spin2, spin3, spin4) # calculate on
     return sin(spin0old[2])*((cos(phi-spin1[1])-cos(phiold-spin1[1]))*sin(spin1[2])  +  (cos(phi-spin2[1])-cos(phiold-spin2[1]))*sin(spin2[2])  +  (cos(phi-spin3[1])-cos(phiold-spin3[1]))*sin(spin3[2])  +  (cos(phi-spin4[1])-cos(phiold-spin4[1]))*sin(spin4[2]))
 end
 
-function SingleFlip(Lattice, i, j, T, L, σ, pi32, PBC, d, p, CloserTheta)      # Propose a new configuration and either accept or reject it
-    newspin, Whichflip = NewSpin(Lattice[:,i,j], σ, pi32, p)
-    if CloserTheta < 1
-        newspin[2] = Lattice[2,i,j] + CloserTheta*(newspin[2]-Lattice[2,i,j])
-    end
+function SingleFlip(Lattice::Array{Float32, 3}, i::Int, j::Int, T::Float32, L::Int, σ::Float32, pi32::Float32, PBC::Bool, d::Float32, p::Float32)      # Propose a new configuration and either accept or reject it
+    newspin, WhichFlip = NewSpin(Lattice[:,i,j], σ, pi32, p)
     if PBC==false
         Δ = 0f0
         if i!=1
@@ -70,10 +76,10 @@ function SingleFlip(Lattice, i, j, T, L, σ, pi32, PBC, d, p, CloserTheta)      
         acceptance=false
         ΔE=0f0
     end
-    return Lattice[:,i,j], ΔE, acceptance, Whichflip
+    return Lattice[:,i,j], ΔE, acceptance, WhichFlip
 end
 
-function NewSpin(spin, σ, pi32, p) # Heisenberg -- propose a new spin
+function NewSpin(spin::Vector, σ::Float32, pi32::Float32, p::Float32) # Heisenberg -- propose a new spin
     Whichflip = rand(TaskLocalRNG()) < p
     if Whichflip == true
         spin[2] = pi32 - spin[2]
@@ -86,7 +92,7 @@ function NewSpin(spin, σ, pi32, p) # Heisenberg -- propose a new spin
     return spin, Whichflip+1
 end
 
-function SingleFlipXY(Lattice, i, j, T, L, σ, pi32, PBC, d, p)      # Propose a new configuration and either accept or reject it
+function SingleFlipXY(Lattice::Array{Float32, 3}, i::Int, j::Int, T::Float32, L::Int, σ::Float32, pi32::Float32, PBC::Bool, d::Float32, p::Float32)      # Propose a new configuration and either accept or reject it
     if rand(TaskLocalRNG()) > p
         newspin = [NewPhi(Lattice[1,i,j], σ[1], pi32), Lattice[2,i,j]]
         WhichAngle=1
@@ -136,8 +142,22 @@ function NewTheta(theta, σθ, pi32)
     return  theta
 end
 
-function MultipleIsingFlips(Lattice, L, T, pi32, d, PBC)      # Wolff update
-    p = 1 - ℯ^(-2/T) # what should we do about d ?
+function LatticeSweep(Lattice::Array{Float32, 3}, L::Int, E::Float32, T::Float32, σ::Float32, pi32::Float32, PBC::Bool, d::Float32, p::Float32)    #MH lattice sweep
+    Accept = [0,0]
+    Tr = [0,0]
+    for j=1:L
+        for k=1:L
+            Lattice[:,j,k], ΔE, a, Whichflip = SingleFlip(Lattice,j,k,T,L,σ,pi32, PBC, d, p)
+            Accept[Whichflip]+=a
+            Tr[Whichflip]+=1
+            E+=ΔE
+        end
+    end
+    return Lattice, E, Accept, Tr
+end
+
+function MultipleIsingFlips(Lattice::Array{Float32, 3}, L::Int, T::Float32, pi32::Float32, d::Float32, PBC::Bool)      # Wolff update
+    p = 1 - ℯ^(-2/T)    # what should we do about d ?
     k, l = rand(TaskLocalRNG(), 1:L, 2)
     InCluster = falses(L,L)
     InCluster[k,l] = true
@@ -152,7 +172,7 @@ function MultipleIsingFlips(Lattice, L, T, pi32, d, PBC)      # Wolff update
     return Lattice, E
 end
 
-function AddNeighbors(i,j, L, InCluster, p, ZLattice, pi32)    # add or not to the cluster the neighbors of a site already in the cluster
+function AddNeighbors(i::Int,j::Int, L::Int, InCluster::BitMatrix, p::Float32, ZLattice::Array{Float32, 2}, pi32::Float32)    # add or not to the cluster the neighbors of a site already in the cluster
     NewCheckNeighbor = []
     Zsign = sign(ZLattice[i,j]-pi32/2)
     neighbor = [[mod(i-2,L)+1,j],[i,mod(j-2,L)+1],[mod(i,L)+1,j],[i,mod(j,L)+1]]    # The four neighbors
@@ -166,7 +186,81 @@ function AddNeighbors(i,j, L, InCluster, p, ZLattice, pi32)    # add or not to t
     return NewCheckNeighbor, InCluster
 end
 
-function MHvideo(Lattice, L, N, T, Nbin, burn, pi32, PBC, d, p)     # Sampler
+function Swap(Replicas::Vector{Replica}, i::Int)    # Try to swap with the next temperature
+    j=i+1
+    if (1/Replicas[i].T - 1/Replicas[j].T)*(Replicas[i].E - Replicas[j].E) > rand(TaskLocalRNG())
+        Replicas[i].Lattice, Replicas[j].Lattice = Replicas[j].Lattice, Replicas[i].Lattice
+        Replicas[i].E,       Replicas[j].E       = Replicas[j].E,       Replicas[i].E
+        Replicas[i].σ,       Replicas[j].σ       = Replicas[j].σ,       Replicas[i].σ
+        return true
+    else
+        return false
+    end
+end
+
+function MHStep(step::Int, rep::Replica, L::Int, d::Float32, p::Float32, PBC::Bool, pi32::Float32)
+    IsingFlip = mean(cos.(rep.Lattice[2,:,:]).^2) > .75     # require that in average [theta < pi/6 or theta > 5 pi/6] to have the possibility (with proba p) to Ising-flip
+    if mod(step,1000)==0 && IsingFlip==true
+        rep.Lattice, rep.E = MultipleIsingFlips(rep.Lattice, L, rep.T, pi32, d, PBC)    # Wolff algorithm
+    else
+        rep.Lattice, rep.E, Accept, Tr = LatticeSweep(rep.Lattice, L, rep.E, rep.T, rep.σ, pi32, PBC, d, p*IsingFlip)
+        if Tr[1] > 20
+            rep.σ = min(max(rep.σ*2*Accept[1]/Tr[1], 1/sqrt(step+1000)), 10)     # if the acceptance is higher than .5, sigma should increase (decreased) to explore more (less) the phasespace to get closer to .5
+            rep.Acceptance += Accept
+            rep.Try += Tr
+        end
+    end
+    return rep
+end
+
+function MH_parallel_tempering(L::Int, N::Int, T::Vector{Float32}, burn::Int, pi32::Float32, AllLattices::Vector{Int}, d::Float32, p::Float32, Save::Bool=false, Skip::Int=10, swap::Int=101)     # Sampler
+    nT = length(T)
+    Replicas = Vector{Replica}(undef, nT)
+    for i=1:nT  # Initialize Replicas
+        lat = Initial_lattice(L, pi32)
+        Replicas[i] = Replica(lat, Energy(lat, L, PBC, d), T[i], .25f0, [0,0], [0,0])
+    end
+    Nswap = round(Int, N/swap)
+    Nmeasurement = round(Int, (N - burn)/Skip)
+    energies = zeros(Float32, nT, Nmeasurement)
+    # Energies2 = zeros(Float32, nT, Int(Nmeasurement/Skip))
+    mag  = zeros(Float32, nT, Nmeasurement)
+    correl = zeros(Float32, nT, length(RowCorr(Replicas[1].Lattice, L, PBC)))
+    SwapAcceptance = zeros(Int, nT-1)
+    
+    for i=1:Nswap
+        Threads.@threads for n=1:nT
+            for j=1:swap
+                k = (i-1)*swap+j
+                Replicas[n] = MHStep(k, Replicas[n], L, d, p, PBC, pi32)
+                if mod(k, Skip) == 0 && k > burn            # to not measure every lattice sweeps
+                    lat = Replicas[n].Lattice
+                    m = round(Int,(k-burn)/Skip)
+                    energies[n, m] = copy(Replicas[n].E)
+                    mag[n, m] = sqrt(mean(cos(phi)*sin(theta) for phi in lat[1,:,:], theta in lat[2,:,:])^2 + mean(sin(phi)*sin(theta) for phi in lat[1,:,:], theta in lat[2,:,:])^2 + mean(cos(theta) for theta in lat[2,:,:])^2)
+                    correl[n,:] += RowCorr(lat, L, PBC)
+                    # Energies2[n, m] = copy(Energy(lat, L, PBC, d))/(!PBC*L*(L-1) + PBC*L^2)
+                end
+            end
+        end
+        for n=1:nT-1
+            SwapAcceptance[n] += Swap(Replicas, n)
+        end
+    end
+    SwapAccept = SwapAcceptance/Nswap
+    energies /= !PBC*L*(L-1) + PBC*L^2
+    if Save==true
+        for n=1:nT
+            Energies, Mag, corr = energies[n,:], mag[n,:], correl[n] 
+            accept = Replicas[n].Acceptance ./ Replicas[n].Try
+            @save "Data/$(AllLattices)_$N/$(L)_$(T[n])_$d.jld2" Energies Mag corr accept# Energies2
+        end
+        @save "Data/$(AllLattices)_$N/swap_$(L)_$d.jld2" SwapAccept
+    end
+    return mean(energies[1,:]), #=mean(Energies2[1,:]),=# mean(mag[1,:])
+end
+
+function MHvideo(Lattice::Array{Float32, 3}, L::Int, N::Int, T::Float32, Nbin::Int, burn::Int, pi32::Float32, PBC::Bool, d::Float32, p::Float32)     # Sampler
     T0 = 1.3f0
     σ=.25
     acceptance=[0,0]                  # around, Ising, multiflips
@@ -176,11 +270,10 @@ function MHvideo(Lattice, L, N, T, Nbin, burn, pi32, PBC, d, p)     # Sampler
     E = Energy(Lattice, L, PBC, d)
     corr = zeros(Float32, length(RowCorr(Lattice, L, PBC)))
     Lattices=[]
-    CloserTheta = Float32(1) # Be able to adjust theta and phi independently by reducing the theta difference of an old site and the proposal
     
     for i=1:N                   # Calculate the energy at each flip
-        AcceptanceLoop = [0,0]
-        TryLoop = [0,0]
+        Accept = [0,0]
+        Tr = [0,0]
         IsingFlip = mean(cos.(Lattice[2,:,:]).^2) > .75     # require that in average [theta < pi/6 or theta > 5 pi/6] to have the possibility (with proba p) to Ising-flip
         if T0 > T
             T0 = 1.3f0*(1f0 - Float32(i/burn))
@@ -189,18 +282,11 @@ function MHvideo(Lattice, L, N, T, Nbin, burn, pi32, PBC, d, p)     # Sampler
         if mod(i,40)==0 && IsingFlip==true                   # Wolff algorithm
             Lattice, E = MultipleIsingFlips(Lattice, L, T, pi32, d, PBC)
         else
-            for j=1:L
-                for k=1:L
-                    Lattice[:,j,k], ΔE, a, Whichflip = SingleFlip(Lattice,j,k,T0,L,σ,pi32, PBC, d, p*IsingFlip, CloserTheta)
-                    AcceptanceLoop[Whichflip]+=a
-                    TryLoop[Whichflip]+=1
-                    E+=ΔE
-                end
-            end
-            acceptance += AcceptanceLoop
-            Try += TryLoop
-            if TryLoop[1] > 3
-                σ = min(max(σ*2*AcceptanceLoop[1]/TryLoop[1], 1/sqrt(i+1000)), 2)     # if the acceptance is higher than .5, sigma should increase else to be decreased to explore more the phasespace
+            Lattice, E, Accept, Tr = LatticeSweep(Lattice, L, E, Accept, Tr, T0, σ, pi32, PBC, d, p*IsingFlip)
+            acceptance += Accept
+            Try += Tr
+            if Tr[1] > 3
+                σ = min(max(σ*2*Accept[1]/Tr[1], 1/sqrt(i+1000)), 2)     # if the acceptance is higher than .5, sigma should increase else to be decreased to explore more the phasespace
             end
         end
         if mod(i,Int(N/200))==0
@@ -210,7 +296,6 @@ function MHvideo(Lattice, L, N, T, Nbin, burn, pi32, PBC, d, p)     # Sampler
             j = i-burn
             Energies[j] = E
             Mag[j] = sqrt(mean(cos(phi)*sin(theta) for phi in Lattice[1,:,:], theta in Lattice[2,:,:])^2 + mean(sin(phi)*sin(theta) for phi in Lattice[1,:,:], theta in Lattice[2,:,:])^2 + mean(cos(theta) for theta in Lattice[2,:,:])^2)
-            # vor += Vortex(Lattice,pi32, PBC)
             corr += RowCorr(Lattice, L, PBC)
         end
     end
@@ -243,10 +328,10 @@ function MHvideo(Lattice, L, N, T, Nbin, burn, pi32, PBC, d, p)     # Sampler
 
     gif(anim, "C:/Users/yanis/Desktop/Cours/These/Heisenberg/Spin_$N.gif", fps=10)
 
-    return mean(Energies), std(EnergyBins), mean(Mag), std(Magbin)#=, χmean, Errorpropagation(Magbin,std(Magbin))/T*L^2 #=std(χbin)=#, Cmean, Errorpropagation(EnergyBins,std(EnergyBins))/T^2*L^2, #=vor/(N-burn+1),=# corr/(N-burn+1)=#, acceptance ./ Try
+    return mean(Energies), std(EnergyBins), mean(Mag), std(Magbin)#=, χmean, Errorpropagation(Magbin,std(Magbin))/T*L^2 #=std(χbin)=#, Cmean, Errorpropagation(EnergyBins,std(EnergyBins))/T^2*L^2, corr/(N-burn+1)=#, acceptance ./ Try
 end
 
-function MH(Lattice, L, N, T, burn, pi32, AllLattices, d, p, Save, Skip=10)     # Sampler
+function MH(Lattice::Array{Float32, 3}, L::Int, N::Int, T::Float32, burn::Int, pi32::Float32, AllLattices::Vector, d::Float32, p::Float32, Save::Bool, Skip=10::Int)     # Sampler
     T0 = 1.3f0
     σ=.25f0
     Nmeasurement = N - burn
@@ -258,10 +343,8 @@ function MH(Lattice, L, N, T, burn, pi32, AllLattices, d, p, Save, Skip=10)     
     Energies = zeros(Float32, Int(Nmeasurement/Skip))
     # Energies2 = zeros(Float32, Int(Nmeasurement/Skip))
     Mag  = zeros(Float32, Int(Nmeasurement/Skip))
-    # vor  = 0f0
     corr = zeros(length(RowCorr(Lattice, L, PBC)))
-    CloserTheta = Float32(1) # Be able to adjust theta and phi independently by reducing the theta difference of an old site and the proposal
-    
+
     for i=1:N                   # Calculate the energy at each flip
         IsingFlip = mean(cos.(Lattice[2,:,:]).^2) > .75     # require that in average [theta < pi/6 or theta > 5 pi/6] to have the possibility (with proba p) to Ising-flip
         if T0 > T                                           # To begin with a "high" temperature to help it converges more easily, and decrease the temperature until the wanted one
@@ -271,14 +354,7 @@ function MH(Lattice, L, N, T, burn, pi32, AllLattices, d, p, Save, Skip=10)     
         if mod(i,1000)==0 && IsingFlip==true                # Wolff algorithm
             Lattice, E = MultipleIsingFlips(Lattice, L, T, pi32, d, PBC)
         else
-            for j=1:L
-                for k=1:L
-                    Lattice[:,j,k], ΔE, a, Whichflip = SingleFlip(Lattice,j,k,T0,L,σ,pi32, PBC, d, p*IsingFlip, CloserTheta)
-                    Accept[Whichflip]+=a
-                    Tr[Whichflip]+=1
-                    E+=ΔE
-                end
-            end
+            Lattice, E, Accept, Tr = LatticeSweep(Lattice, L, E, Accept, Tr, T0, σ, pi32, PBC, d, p*IsingFlip)
             if Tr[1] > 1000
                 σ = min(max(σ*2*Accept[1]/Tr[1], 1/sqrt(i+1000)), 10)     # if the acceptance is higher than .5, sigma should increase (decreased) to explore more (less) the phasespace to get closer to .5
                 acceptance += Accept
@@ -291,16 +367,15 @@ function MH(Lattice, L, N, T, burn, pi32, AllLattices, d, p, Save, Skip=10)     
             j = Int((i-burn)/Skip)
             Energies[j] = copy(E)
             Mag[j] = sqrt(mean(cos(phi)*sin(theta) for phi in Lattice[1,:,:], theta in Lattice[2,:,:])^2 + mean(sin(phi)*sin(theta) for phi in Lattice[1,:,:], theta in Lattice[2,:,:])^2 + mean(cos(theta) for theta in Lattice[2,:,:])^2)
-            # vor += Vortex(Lattice, pi32, PBC) #    ?????    No need for 3D, right ?
             corr += RowCorr(Lattice, L, PBC)
             # Energies2[j] = copy(Energy(Lattice, L, PBC, d))/(!PBC*L*(L-1) + PBC*L^2)
         end
     end
     Energies /= !PBC*L*(L-1) + PBC*L^2
     accept = acceptance ./ Try
-    if Save==true; @save "Data/$(AllLattices)_$N/$(L)_$(T)_$d.jld2" Energies Mag #=vor=# corr accept# Energies2
+    if Save==true; @save "Data/$(AllLattices)_$N/$(L)_$(T)_$d.jld2" Energies Mag corr accept# Energies2
     end
-    return mean(Energies), mean(Energies2), mean(Mag)
+    return mean(Energies), #=mean(Energies2),=# mean(Mag)
 end
 
 function MHXY(Lattice, L, N, T, burn, pi32, AllLattices, d, Save, Skip=10)     # Sampler
@@ -313,35 +388,26 @@ function MHXY(Lattice, L, N, T, burn, pi32, AllLattices, d, Save, Skip=10)     #
     E = Energy(Lattice, L, PBC, d)
     Energies = zeros(Float32, Int(Nmeasurement/Skip))
     Mag  = zeros(Float32, Int(Nmeasurement/Skip))
-    # vor  = 0f0
     corr = zeros(length(RowCorr(Lattice, L, PBC)))
     magz, absmagz = zeros(Float32, Int(Nmeasurement/Skip)), zeros(Float32, Int(Nmeasurement/Skip))
     sigma1, sigma2 = zeros(Float32, Int(Nmeasurement/Skip)), zeros(Float32, Int(Nmeasurement/Skip))
 
     for i=1:N                   # Calculate the energy at each flip
-        AcceptanceLoop = [0,0]
-        TryLoop = [0,0]
+        Accept = [0,0]
+        Tr = [0,0]
         if T0 > T                                           # To begin with a "high" temperature to help it converges more easily, and decrease the temperature until the wanted one
             T0 = 1.3f0*(1f0 - Float32(round(i/N;digits=1)))
         else; T0 = T
         end
-        for j=1:L
-            for k=1:L
-                Lattice[:,j,k], ΔE, a, Whichflip = SingleFlipXY(Lattice,j,k,T0,L,σ,pi32, PBC, d, p)
-                AcceptanceLoop[Whichflip]+=a
-                TryLoop[Whichflip]+=1
-                E+=ΔE
-            end
-        end
-        acceptance += AcceptanceLoop
-        Try += TryLoop
-        σ = min.(σ * 2 .*AcceptanceLoop./TryLoop .+.0000001f0, [2,1])     # if the acceptance is higher than .5, sigma should increase else to be decreased to explore more the phasespace
+        Lattice, E, Accept, Tr = LatticeSweep(Lattice, L, E, Accept, Tr, T0, σ, pi32, PBC, d, 0)
+        acceptance += Accept
+        Try += Tr
+        σ = min.(σ * 2 .*Accept./Tr .+.0000001f0, [2,1])     # if the acceptance is higher than .5, sigma should increase else to be decreased to explore more the phasespace
         p = σ[2]/sum(σ)                             # if σtheta (σ[2]) is very low (and M_z around 0), it means that we are probably in XY limit, thus it will be more intersting to move around phi as theta already stable.
         if mod(i, Skip) == 0 && i > burn            # to not measure every lattice sweeps
             j = Int((i-burn)/Skip)
             Energies[j] = copy(E)
             Mag[j] = sqrt(mean(cos(phi)*sin(theta) for phi in Lattice[1,:,:], theta in Lattice[2,:,:])^2 + mean(sin(phi)*sin(theta) for phi in Lattice[1,:,:], theta in Lattice[2,:,:])^2 + mean(cos(theta) for theta in Lattice[2,:,:])^2)
-            # vor += Vortex(Lattice, pi32, PBC) #    ?????    No need for 3D, right ?
             corr += RowCorr(Lattice, L, PBC)
             magz[j] = mean(cos(theta) for theta in Lattice[2,:,:])
             sigma1[j] = σ[1]
@@ -351,12 +417,62 @@ function MHXY(Lattice, L, N, T, burn, pi32, AllLattices, d, Save, Skip=10)     #
     end
     Energies /= !PBC*L*(L-1) + PBC*L^2
     accept = acceptance ./ Try
-    if Save==true; @save "Data/$(AllLattices)_$N/$(L)_$(T)_$d.jld2" Energies Mag #=vor=# corr accept
+    if Save==true; @save "Data/$(AllLattices)_$N/$(L)_$(T)_$d.jld2" Energies Mag corr accept
     end
     return Energies[end], magz, accept, σ, sigma1, sigma2, absmagz
 end
 
-function matrixcolor(Lattice, L)     # represent the phase by a color
+function MHCorr(Lattice, L, N, T, burn, pi32, AllLattices, d, p, Save, Skip=10)     # Sampler
+    T0 = 1.3f0
+    σ=.25f0
+    Nmeasurement = N - burn
+    acceptance = [0,0]              # around, Ising, multiflips
+    Try = [0,0]
+    Accept = [0,0]                  # accept is usefull to keep track of recent the acceptance rate whereas acceptance keep track of the total
+    Tr = [0,0]                      # same reason as accept
+    E = Energy(Lattice, L, PBC, d)
+    Energies = zeros(Float32, Int(Nmeasurement/Skip))
+    Energies2 = zeros(Float32, Int(Nmeasurement/Skip))
+    Mag  = zeros(Float32, Int(Nmeasurement/Skip))
+    Lattices=[]
+    corr = zeros(length(RowCorr(Lattice, L, PBC)))
+    
+    for i=1:N                   # Calculate the energy at each flip
+        IsingFlip = mean(cos.(Lattice[2,:,:]).^2) > .75     # require that in average [theta < pi/6 or theta > 5 pi/6] to have the possibility (with proba p) to Ising-flip
+        if T0 > T                                           # To begin with a "high" temperature to help it converges more easily, and decrease the temperature until the wanted one
+            T0 = 2.8f0*(1 - Float32(round(i/burn;digits=1)))
+        else; T0 = T
+        end
+        if mod(i,1000)==0 && IsingFlip==true                # Wolff algorithm
+            Lattice, E = MultipleIsingFlips(Lattice, L, T, pi32, d, PBC)
+        else
+            Lattice, E, Accept, Tr = LatticeSweep(Lattice, L, E, Accept, Tr, T0, σ, pi32, PBC, d, p*IsingFlip)
+            if Tr[1] > 1000
+                σ = min(max(σ*2*Accept[1]/Tr[1], 1/sqrt(i+1000)), 10)     # if the acceptance is higher than .5, sigma should increase (decreased) to explore more (less) the phasespace to get closer to .5
+                acceptance += Accept
+                Try += Tr
+                Accept = [0,0]
+                Tr = [0,0]
+            end
+        end
+        if mod(i, Skip) == 0 && i > burn            # to not measure every lattice sweeps
+            j = Int((i-burn)/Skip)
+            Energies[j] = copy(E)
+            Mag[j] = sqrt(mean(cos(phi)*sin(theta) for phi in Lattice[1,:,:], theta in Lattice[2,:,:])^2 + mean(sin(phi)*sin(theta) for phi in Lattice[1,:,:], theta in Lattice[2,:,:])^2 + mean(cos(theta) for theta in Lattice[2,:,:])^2)
+            corr += RowCorr(Lattice, L, PBC)
+            Energies2[j] = copy(Energy(Lattice, L, PBC, d))
+            push!(Lattices, copy(Lattice))
+        end
+    end
+    Energies /= !PBC*L*(L-1) + PBC*L^2
+    Energies2 /= !PBC*L*(L-1) + PBC*L^2
+    accept = acceptance ./ Try
+    if Save==true; @save "Data/$(AllLattices)_$N/$(L)_$(T)_$d.jld2" Energies Mag corr accept Energies2 Lattices
+    end
+    return mean(Energies), mean(Energies2), mean(Mag)
+end
+
+function matrixcolor(Lattice::Array{Float32, 3}, L::Int)     # represent the phase by a color
     B=zeros(RGB{Float32},L,L)
     for i=1:L
         for j=1:L
@@ -386,14 +502,14 @@ function matrixcolorZ(Lattice, L)     # represent the phase by a color
     return B
 end
 
-function RowCorr(Lattice, L, PBC)   # Return the average row Correlation of the matrix (in a Correlation vector : first neigbour, second neigbour...)
+function RowCorr(Lattice::Array{Float32, 3}, L::Int, PBC::Bool)   # Return the average row Correlation of the matrix (in a Correlation vector : first neigbour, second neigbour...)
     corr=[]
     if PBC==false
         for i=1:(L-1)
             a=0
             for j=1:L
                 for k=1:(L-i)
-                    a+=Correlation(Lattice[:,j,k]-Lattice[:,j,k+i])
+                    a+=Correlation(Lattice[:,j,k],Lattice[:,j,mod(k+i-1,L)+1])
                 end
             end
             push!(corr, a/(L-i)/L)
@@ -403,26 +519,13 @@ function RowCorr(Lattice, L, PBC)   # Return the average row Correlation of the 
             a=0
             for j=1:L
                 for k=1:L
-                    a+=cos(Lattice[1,j,k]-Lattice[1,j,mod(k+i-1,L)+1]) * cos(Lattice[2,j,k]-Lattice[2,j,mod(k+i-1,L)+1])
+                    a+=Correlation(Lattice[:,j,k],Lattice[:,j,mod(k+i-1,L)+1]) #cos(Lattice[1,j,k]-Lattice[1,j,mod(k+i-1,L)+1]) * cos(Lattice[2,j,k]-Lattice[2,j,mod(k+i-1,L)+1])
                 end
             end
             push!(corr, a)
         end
     end
     return corr/L^2
-end
-
-function Vortex(A, pi32, PBC) # A is the lattice, Vortex return a matrix with -1,0 or 1 depending on if there is an anti-vortex, nothing or a vertex   
-    N=Int(sqrt(length(A)))
-    vortex=zeros(Int, N, N)
-    n = PBC ? N : N-1
-    for i=1:n
-        for j=1:n
-            v=mod(A[i,j]-A[i,mod(j,N)+1]+pi32,2*pi32) + mod(A[i,mod(j,N)+1]-A[mod(i,N)+1,mod(j,N)+1]+pi32,2*pi32) + mod(A[mod(i,N)+1,mod(j,N)+1]-A[mod(i,N)+1,j]+pi32,2*pi32) + mod(A[mod(i,N)+1,j]-A[i,j]+pi32,2*pi32)-4*pi32
-            vortex[i,j] = round(Int,v/pi32/2)
-        end
-    end
-    return #=vortex, =#Float32(count(x -> x==1, vortex)/N^2)#, count(x -> x==-1, vortex)/N^2
 end
 
 
@@ -656,79 +759,3 @@ end
 # ν : corr length                       Ising : 1       XY : NOP 𝜉 diverges exponentially
 
 # continuous symmetries cannot be spontaneously broken in 2D
-
-# using DelimitedFiles; writedlm(stdout, vort)  # print matrix in a nice form
-
-# σ = .2f0 + T^1.5f0 + T^.3f0/5
-
-
-
-
-#=
-pal = cgrad([:green, :black, :orange], length(d))  # fixed, ordered palette
-
-for z in 1:length(d)
-    plot!(T, vect[i, :, z], yerr = Vector(error[i, :, z]), markerstrokecolor = :auto, label = "$(d[z])", ylims = (max(0, minimum(vect[i,:,:])), maximum(vect[i,:,:]) + maximum(error[i,:,:])), seriescolor = pal[z]   # ← manually pick the correct color)
-end
-replace("Data/$(L)_$N", "[" => "\\[", "]" => "\\]", " " => "\\ ")
-=#
-
-function MHCorr(Lattice, L, N, T, burn, pi32, AllLattices, d, p, Save, Skip=10)     # Sampler
-    T0 = 1.3f0
-    σ=.25f0
-    Nmeasurement = N - burn
-    acceptance = [0,0]              # around, Ising, multiflips
-    Try = [0,0]
-    Accept = [0,0]                  # accept is usefull to keep track of recent the acceptance rate whereas acceptance keep track of the total
-    Tr = [0,0]                      # same reason as accept
-    E = Energy(Lattice, L, PBC, d)
-    Energies = zeros(Float32, Int(Nmeasurement/Skip))
-    Energies2 = zeros(Float32, Int(Nmeasurement/Skip))
-    Mag  = zeros(Float32, Int(Nmeasurement/Skip))
-    # vor  = 0f0
-    Lattices=[]
-    corr = zeros(length(RowCorr(Lattice, L, PBC)))
-    CloserTheta = Float32(1) # Be able to adjust theta and phi independently by reducing the theta difference of an old site and the proposal
-    
-    for i=1:N                   # Calculate the energy at each flip
-        IsingFlip = mean(cos.(Lattice[2,:,:]).^2) > .75     # require that in average [theta < pi/6 or theta > 5 pi/6] to have the possibility (with proba p) to Ising-flip
-        if T0 > T                                           # To begin with a "high" temperature to help it converges more easily, and decrease the temperature until the wanted one
-            T0 = 2.8f0*(1 - Float32(round(i/burn;digits=1)))
-        else; T0 = T
-        end
-        if mod(i,1000)==0 && IsingFlip==true                # Wolff algorithm
-            Lattice, E = MultipleIsingFlips(Lattice, L, T, pi32, d, PBC)
-        else
-            for j=1:L
-                for k=1:L
-                    Lattice[:,j,k], ΔE, a, Whichflip = SingleFlip(Lattice,j,k,T0,L,σ,pi32, PBC, d, p*IsingFlip, CloserTheta)
-                    Accept[Whichflip]+=a
-                    Tr[Whichflip]+=1
-                    E+=ΔE
-                end
-            end
-            if Tr[1] > 1000
-                σ = min(max(σ*2*Accept[1]/Tr[1], 1/sqrt(i+1000)), 10)     # if the acceptance is higher than .5, sigma should increase (decreased) to explore more (less) the phasespace to get closer to .5
-                acceptance += Accept
-                Try += Tr
-                Accept = [0,0]
-                Tr = [0,0]
-            end
-        end
-        if mod(i, Skip) == 0 && i > burn            # to not measure every lattice sweeps
-            j = Int((i-burn)/Skip)
-            Energies[j] = copy(E)
-            Mag[j] = sqrt(mean(cos(phi)*sin(theta) for phi in Lattice[1,:,:], theta in Lattice[2,:,:])^2 + mean(sin(phi)*sin(theta) for phi in Lattice[1,:,:], theta in Lattice[2,:,:])^2 + mean(cos(theta) for theta in Lattice[2,:,:])^2)
-            # vor += Vortex(Lattice, pi32, PBC) #    ?????    No need for 3D, right ?
-            corr += RowCorr(Lattice, L, PBC)
-            Energies2[j] = copy(Energy(Lattice, L, PBC, d))
-            push!(Lattices, copy(Lattice))
-        end
-    end
-    Energies /= !PBC*L*(L-1) + PBC*L^2
-    Energies2 /= !PBC*L*(L-1) + PBC*L^2
-    accept = acceptance ./ Try
-    if Save==true; @save "Data/$(AllLattices)_$N/$(L)_$(T)_$d.jld2" Energies Mag #=vor=# corr accept Energies2 Lattices
-    end
-    return mean(Energies), mean(Energies2), mean(Mag)
-end

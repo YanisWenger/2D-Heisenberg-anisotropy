@@ -5,9 +5,9 @@ Nbin = 50       # Number of bins
 PBC=true        # Periodic Boundary Conditions
 N = 1040_000    # Ising
 N = 1100_000    # XY
-N = 200_000     # global
+N = 1000_000     # XYZ
 L=[8,12,20,32]  # Lattices size
-L = [8,24]
+L = [8,12, 20]
 
 N = 50_000_000
 L=[10]
@@ -40,7 +40,7 @@ for l in eachindex(L)
             Acceptance[:,l,t,z] = Data[:"accept"]
             # E2[l,t,z], EΔ2[l,t,z] = mean(Data[:"Energies2"]),                            std(Binor(Data[:"Energies2"], Nbin))
             # C2[l,t,z], CΔ2[l,t,z] = (mean(Data[:"Energies2"].^2)-E2[l,t,z]^2)/T[t]^2*L[l]^2, Errorpropagation(Binor(Data[:"Energies2"], Nbin), EΔ2[l,t,z])/T[t]^2*L[l]^2
-            AllLattices[l,t,z] = Data[:"Lattices"]
+            # AllLattices[l,t,z] = Data[:"Lattices"]
             println("N = ", L[l], "\tT = ", T[t], "\td = ", d[z], "\t E = ", round(E[l,t,z];digits=3), " ± ", round(EΔ[l,t,z];digits=3), "\tM = ", round(M[l,t,z];digits=3), " ± ", round(MΔ[l,t,z];digits=3), " \t χ = ", round(χ[l,t,z];digits=7), " ± ", round(χΔ[l,t,z];digits=7), "\tC = ", round(C[l,t,z];digits=2), " ± ", round(CΔ[l,t,z];digits=5), "\taccept = ", round.(Acceptance[:,l,t,z];digits=3))
         end
     end
