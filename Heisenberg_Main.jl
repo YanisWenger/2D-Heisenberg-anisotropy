@@ -1,14 +1,13 @@
-using Distributions, Base.Threads, Dierckx, LsqFit, Random, JLD2   # To have random distrib of spin, parallelize, interpolate, Random, save data in compact file
+using Distributions, Base.Threads, Random, JLD2   # To have random distrib of spin, parallelize, interpolate, Random, save data in compact file
 include("./Heisenberg_Main_functions.jl")
 
 N=20000
-burn = Int(min(N/4,100000))
-L=[8,10]
-T=Float32.([.2,.7,1.1,1.6])
-d=Float32.([-1000,0,1000])
+burn = Int(min(N/4,100000))     # Burning period
+L=[8,12]
+T=Temperatures(.6,1.6,40)
+d=Float32.([-2,-1,-.5,0,1000])
 pIsing = .6f0
 pXY = .7f0
-burn = Int(min(N/4,100000))     # Burning period
 PBC   = true                    # Periodic Boundary Conditions
 pi32  = Float32(π)
 Save  = true
@@ -28,8 +27,5 @@ end
 println(t)
 
 
-
-
 # Katzgraber, MH parallel, with right temperature (and eq19 later)
-
 # C, Susc and Corr max

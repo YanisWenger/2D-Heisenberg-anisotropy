@@ -43,6 +43,10 @@ function Binor2nd(arr, Nbin, T, L) # USELESS FOR MH (as I use error propag)
     return Bins
 end
 
+function Errorpropagation(v, Δ) # propagation of error for c and χ from the error on E and M
+    return sqrt(sum((v .- mean(v)).^2)/length(v))*2*Δ
+end
+
 function basicplot1(L, T_for_d, dvect, d, vect, ytitle="", error=[], save=false)   # read data from a file and plot it
     i = findfirst(==(d), dvect)
     endT = length(vect[1,:,i])
@@ -127,10 +131,6 @@ function PlotColord(x, dmin, dmax)
     end
 end
 
-function Errorpropagation(v, Δ) # propagation of error for c and χ from the error on E and M
-    return sqrt(sum((v .- mean(v)).^2)/length(v))*2*Δ
-end
-
 function interpmax(L, T, y) # interpolate and find the max
     Max = []
     xinterp = collect(.1:.001:2)
@@ -187,24 +187,6 @@ end
 
 function Correlation(spin1::Vector, spin2::Vector)  # Correlation between two spins
     return sin(spin1[2])*sin(spin2[2])*cos(spin1[1]-spin2[1]) + cos(spin1[2])*cos(spin2[2])  
-end
-
-function MeanCorrTime1(Lattices)
-    L = length(Lattices[1][:,1,1])
-    n = length(Lattices)
-    Corr = zeros(n-1)
-    for k=1:n-1
-        for l=k+1:n
-            C = 0
-            for i=1:L
-                for j=1:L
-                    C += Correlation(Lattices[k][:,i,j],Lattices[l][:,i,j])
-                end
-            end
-            Corr[l-k] += abs(C)/(n-l+k)
-        end
-    end
-    return Corr*L^(-2)
 end
 
 function MeanCorrTime(Lattices)
