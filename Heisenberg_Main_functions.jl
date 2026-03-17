@@ -16,7 +16,7 @@ function Energy(Lattice::Array{Float32, 3}, L::Int, PBC::Bool, d::Float32)    # 
         i2 = i==L ? 1 : i+1
         for j=1:n
             j2 = j==L ? 1 : j+1
-            E += Correlation(Lattice[1, i,  j], Lattice[2, i, j], Lattice[1, i, j2], Lattice[2, i, j2]) - Correlation(Lattice[1, i,  j], Lattice[2, i,  j], Lattice[1, i2,  j], Lattice[2, i2, j]) + d * cos(Lattice[2, i, j])^2
+            E += -Correlation(Lattice[1, i,  j], Lattice[2, i, j], Lattice[1, i, j2], Lattice[2, i, j2]) - Correlation(Lattice[1, i,  j], Lattice[2, i,  j], Lattice[1, i2,  j], Lattice[2, i2, j]) + d * cos(Lattice[2, i, j])^2
         end
     end
     return E
@@ -142,12 +142,10 @@ end
 
 function LatticeSweep(Lattice::Array{Float32, 3}, L::Int, E::Float32, T::Float32, σ::Float32, σϕ::Float32, σθ::Float32, pi32::Float32, PBC::Bool, d::Float32, pIsing::Float32, pXY::Float32)    #MH lattice sweep
     Accept, Tr = zeros(Int, 4), zeros(Int, 4)
-    for j=1:L
-        for k=1:L
-            Lattice[:,j,k], a, Whichflip = SingleFlip(Lattice,j,k,T,L,σ, σϕ, σθ, pi32, PBC, d, pIsing, pXY)
-            Accept[Whichflip]+=a
-            Tr[Whichflip]+=1
-        end
+    for j in 1:L, k in 1:L
+        Lattice[:,j,k], a, Whichflip = SingleFlip(Lattice,j,k,T,L,σ, σϕ, σθ, pi32, PBC, d, pIsing, pXY)
+        Accept[Whichflip]+=a
+        Tr[Whichflip]+=1
     end
     return Lattice, Accept, Tr
 end
@@ -220,16 +218,15 @@ end
 
 function MH_parallel_tempering(L::Int, N::Int, T::Vector{Float32}, burn::Int, pi32::Float32, AllLattices::Vector{Int}, d::Float32, pIsing::Float32=.6, pXY::Float32=.7, Save::Bool=false, Skip::Int=10, swap::Int=101)     # Sampler
     nT = length(T)
-    Lattices = Array{Array{Float64,3}}(undef, nT, round(Int,2000/Skip)-1)
+    # Lattices = Array{Array{Float64,3}}(undef, nT, round(Int,2000/Skip))#-1)       # To save the last lattices
     Replicas = Vector{Replica}(undef, nT)
-    for i=1:nT  # Initialize Replicas
+    for i=1:nT                              # Initialize Replicas
         lat = Initial_lattice(L, pi32)
         Replicas[i] = Replica(lat, T[i], Energy(lat, L, PBC, d), .25f0, .2f0, .1f0, [0,0,0,0], [0,0,0,0])
     end
-    Nswap = round(Int, N/swap)
-    Nmeasurement = round(Int, (N - burn)/Skip)
+    Nswap = round(Int, N/swap)                      # number of lattice swap's try 
+    Nmeasurement = round(Int, (N - burn)/Skip)      # Number of measurement (as some sweeps are not measured to save some time)
     Energies = zeros(Float32, nT, Nmeasurement)
-    # Energies2 = zeros(Float32, nT, Int(Nmeasurement/Skip))
     Mag  = zeros(Float32, nT, Nmeasurement)
     corr = zeros(Float32, nT, length(RowCorr(Replicas[1].Lattice, L, PBC)))
     SwapAcceptance = zeros(Int, nT-1)
@@ -242,16 +239,16 @@ function MH_parallel_tempering(L::Int, N::Int, T::Vector{Float32}, burn::Int, pi
                 if mod(k, Skip) == 0 && k > burn            # to not measure every lattice sweeps
                     lat = Replicas[n].Lattice
                     m = round(Int,(k-burn)/Skip)
-                    Replicas[n].E = Energy(lat, L, PBC, d)
+                    Energies[n, m] = Energy(lat, L, PBC, d)
                     Mag[n, m] = sqrt(mean(cos(phi)*sin(theta) for phi in lat[1,:,:], theta in lat[2,:,:])^2 + mean(sin(phi)*sin(theta) for phi in lat[1,:,:], theta in lat[2,:,:])^2 + mean(cos(theta) for theta in lat[2,:,:])^2)
                     corr[n,:] += RowCorr(lat, L, PBC)
-                    Energies[n, m] = copy(Energy(lat, L, PBC, d))
-                    if k > N-2000
-                        kk = round(Int,(k+2000-N)/Skip)
-                        Lattices[n, kk] = lat
-                    end
+                    # if k > N-2000
+                    #     kk = round(Int,(k+2000-N)/Skip)
+                    #     Lattices[n, kk] = lat
+                    # end
                 end
             end
+            Replicas[n].E = Energy(Replicas[n].Lattice, L, PBC, d)  #   Only need to calculate the energy for storing (above) and for potentially swapping lattices
         end
         for n=1:nT-1
             SwapAcceptance[n] += Swap(Replicas, n)
@@ -262,13 +259,13 @@ function MH_parallel_tempering(L::Int, N::Int, T::Vector{Float32}, burn::Int, pi
     if Save==true
         for n=1:nT
             accept = Replicas[n].Acceptance ./ Replicas[n].Try
-            @save "Data/$(AllLattices)_$N/$(L)_$(T[n])_$d.jld2" Energies=Energies[n,:] Mag=Mag[n,:] corr=corr[n] accept Lattices=Lattices[n,:]# Energies2
+            @save "Data/$(AllLattices)_$N/$(L)_$(T[n])_$d.jld2" Energies=Energies[n,:] Mag=Mag[n,:] corr=corr[n] accept# Lattices=Lattices[n,:]# Energies2
         end
         @save "Data/$(AllLattices)_$N/swap_$(L)_$d.jld2" SwapAccept
     end
-    for i in eachindex(Lattices)
-        if !isassigned(Lattices,i); println(i);end
-    end
+    # for i in eachindex(Lattices)
+    #     if !isassigned(Lattices,i); println(i);end
+    # end
     for n=1:nT; println("$L \t $d \t $(T[n]) \t $(Replicas[n].Acceptance ./ Replicas[n].Try) \t and Mag2 : $(mean(cos.(Replicas[n].Lattice[2,:,:]).^2))"); end
     return mean(Energies[1,:]), #=mean(Energies2[1,:]),=# mean(Mag[1,:])
 end
