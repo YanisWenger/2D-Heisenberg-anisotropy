@@ -1,5 +1,5 @@
-function Get_T_d(N,L)  # for the first lattice size (supposing they all have the same T and d), gives which T have each d
-    files = glob("$(L[1])*.jld2", ("Data/$(L)_$N"))
+function Get_T_d(N::Int64, L::Vector{Int64}, End::String="")  # for the first lattice size (supposing they all have the same T and d), gives which T have each d
+    files = glob("$(L[1])*.jld2", ("Data/$(L)_$(N)$End"))
     for f in files
         name = splitext(last(splitpath(f)))[1]
         parts = split(name, "_")
@@ -25,7 +25,7 @@ function Get_T_d(N,L)  # for the first lattice size (supposing they all have the
     return all_T, all_d, T_for_d
 end
 
-function Binor(arr, Nbin) # take them Nbin by Nbin and average each the bins.
+function Binor(arr::Vector{Float32}, Nbin::Int64) # take them Nbin by Nbin and average each the bins.
     Bins=[]
     Nperbin = round(Int, length(arr)/Nbin)
     for i=1:Nbin
@@ -34,7 +34,7 @@ function Binor(arr, Nbin) # take them Nbin by Nbin and average each the bins.
     return Bins
 end
 
-function Binor2nd(arr, Nbin, T, L) # USELESS FOR MH (as I use error propag)
+function Binor2nd(arr::Vector{Float32}, Nbin::Int64, T::Float32, L::Int64) # errorbar for c and Χ
     Bins=[]
     Nperbin = round(Int, length(arr)/Nbin)
     for i=1:Nbin
@@ -43,34 +43,34 @@ function Binor2nd(arr, Nbin, T, L) # USELESS FOR MH (as I use error propag)
     return Bins
 end
 
-function Errorpropagation(v, Δ) # propagation of error for c and χ from the error on E and M
+function Errorpropagation(v::Vector{Any}, Δ::Float32) # propagation of error for c and χ from the error on E and M
     return sqrt(sum((v .- mean(v)).^2)/length(v))*2*Δ
 end
 
-function basicplot1(L, T_for_d, dvect, d, vect, ytitle="", error=[], save=false)   # read data from a file and plot it
+function plotL(L::Vector{Int64}, T_for_d::Dict{Float32, Vector{Float32}}, dvect::Vector{Float32}, d::Real, x::Array{Float32, 3}, ytitle::String="", error=[], save::Bool=false)   # read data from a file and plot it
     i = findfirst(==(d), dvect)
-    endT = length(vect[1,:,i])
-    while endT >= 1 && vect[1,endT,i]==0
+    endT = length(x[1,:,i])
+    while endT >= 1 && x[1,endT,i]==0
         endT -= 1
     end
     p=plot()
-    if typeof(vect) == Matrix{Any}
+    if typeof(x) == Matrix{Any}
         for t=1:max(round(Int, length(T_for_d[d])/8),1):length(T_for_d[d])
-            plot!(collect(1:Int(L[end]/2-1)), vect[end,:][t], label="$(T[t])",legend=:topright) # yet not update to work
+            plot!(collect(1:Int(L[end]/2-1)), x[end,:][t], label="$(T[t])",legend=:topright) # yet not update to work
         end
         title!(p, "Correlation (L=$(L[end])) as a function of distance")
         xlabel!(p, "Distance (site)")
     else
         if error != []
-            if ytitle=="C" || ytitle=="Susc"; lim=(max(0, minimum(vect[:,:,i])),maximum(vect[:,3:end,i])+maximum(error[:,3:end,i]))
+            if ytitle=="C" || ytitle=="Susc"; lim=(max(0, minimum(x[:,:,i])),maximum(x[:,3:end,i])+maximum(error[:,3:end,i]))
             else; lim = :auto
             end
             for l in eachindex(L)
-                plot!(T_for_d[d], vect[l, 1:endT,i], yerr = Vector(error[l,1:endT,i]), markerstrokecolor=:auto, label="$(L[l])", ylims = lim)
+                plot!(T_for_d[d], x[l, 1:endT,i], yerr = Vector(error[l,1:endT,i]), markerstrokecolor=:auto, label="$(L[l])", ylims = lim)
             end
         else
             for l in eachindex(L)
-                plot!(T_for_d[d], vect[l, 1:endT,i], label="$(L[l])", ylims=(max(0, minimum(vect[:,1:endT,i])),maximum(vect[:,1:endT,i])))
+                plot!(T_for_d[d], x[l, 1:endT,i], label="$(L[l])", ylims=(max(0, minimum(x[:,1:endT,i])),maximum(x[:,1:endT,i])))
             end
         end
         title!(p, ytitle*" as a function of T with d = $d")
@@ -80,39 +80,44 @@ function basicplot1(L, T_for_d, dvect, d, vect, ytitle="", error=[], save=false)
     if save ==true
         savefig("Plot/"*ytitle*".pdf")
     end
-    println("size vect: ", size(vect))
-    println("size vect[end,:,i]: ", size(vect[end,:,i]))
+    println("size vect: ", size(x))
+    println("size vect[end,:,i]: ", size(x[end,:,i]))
     println("endT: ", endT)
     display(p)
 end
 
-function basicplotd(T_for_d, d, vect, ytitle="", error=[], i=length(vect[:,1,1]), save=false)   # read data from a file and plot it
+function plotd(L::Vector{Int64}, T_for_d::Dict{Float32, Vector{Float32}}, d::Vector{Float32}, x::Array{Float32, 3}, ytitle::String="", error=[], i::Int64=length(x[:,1,1]), save::Bool=false)   # read data from a file and plot it
     p=plot()
     pal = cgrad([RGB(.4,.6,1), RGB(0,0,.5), RGB(0,0,0), RGB(.6,0,0), RGB(1,.6,.6)], [0., .4999, .5, .5001, 1.], categorical = false)
     if error != [] 
-        if ytitle=="C"#= || ytitle=="Susc"=#; lim=(max(0, minimum(vect[i,:,:])),maximum(vect[i,3:end,:])+maximum(error[i,3:end,:]))
+        if ytitle=="C"#= || ytitle=="Susc"=#; lim=(max(0, minimum(x[i,:,:])),maximum(x[i,3:end,:])+maximum(error[i,3:end,:]))
         else; lim = :auto
         end
         for z in eachindex(d)
             rescaleE=0          # To rescale the Energy (only when y = Energy)
-            endT = length(vect[i,:,z])
-            while endT >= 1 && vect[i,endT,z]==0
+            endT = length(x[i,:,z])
+            while endT >= 1 && x[i,endT,z]==0
                 endT -= 1
             end
             if ytitle=="E" && d[z]<0; rescaleE = d[z]; end
-            x = PlotColord(d[z], d[1], d[end])
-            plot!(T_for_d[d[z]], vect[i, 1:endT, z].-rescaleE, yerr = Vector(error[i, 1:endT, z]), label="$(d[z])", ylims=lim, seriescolor = pal[x], linecolor = pal[x], markercolor = pal[x], markerstrokecolor = pal[x], ecolor = pal[x])
+            n = PlotColord(d[z], d[1], d[end])
+            plot!(T_for_d[d[z]], x[i, 1:endT, z].-rescaleE, yerr = Vector(error[i, 1:endT, z]), label="$(d[z])", ylims=lim, seriescolor = pal[n], linecolor = pal[n], markercolor = pal[n], markerstrokecolor = pal[n], ecolor = pal[n])
         end
     else
+        if ytitle=="C"#= || ytitle=="Susc"=#; lim=(max(0, minimum(x[i,:,:])),maximum(x[i,3:end,:]))
+        end
         for z in eachindex(d)
-            endT = length(vect[i,:,z])
-            while endT >= 1 && vect[i,endT,z]==0
+            endT = length(x[i,:,z])
+            while endT >= 1 && x[i,endT,z]==0
                 endT -= 1
             end
-            plot!(T_for_d[d[z]], vect[i, 1:endT, z], label="$(d[z])", seriescolor = pal[z])
+            rescaleE=0
+            if ytitle=="E" && d[z]<0; rescaleE = d[z]; end
+            n = PlotColord(d[z], d[1], d[end])
+            plot!(T_for_d[d[z]], x[i, 1:endT, z].-rescaleE, label="$(d[z])", seriescolor = pal[n])
         end
     end
-    title!(p, ytitle*" as a function of T")
+    title!(p, ytitle*" as a function of T for $(L[i])x$(L[i]) lattices")
     xlabel!(p, "Temperature")
     ylabel!(p, ytitle)
     if save == true
@@ -121,7 +126,7 @@ function basicplotd(T_for_d, d, vect, ytitle="", error=[], i=length(vect[:,1,1])
     display(p)
 end
 
-function PlotColord(x, dmin, dmax)
+function PlotColord(x::Float32, dmin::Float32, dmax::Float32)
     if x < 0
         return .5 - .5* sqrt(x / dmin)
     elseif x > 0
@@ -131,23 +136,21 @@ function PlotColord(x, dmin, dmax)
     end
 end
 
-function interpmax(L, T, y) # interpolate and find the max
-    Max = []
-    xinterp = collect(.1:.001:2)
-    p=plot()
+function interpmax(l::Int64, T::Vector{Float32}, y::Array{Float32,2}) # interpolate and find the Tmax (for all Lattice size)
+    xinterp = collect(.6:.001:2)
+    yinterp=Spline1D(T, y[l,:], k=3)(xinterp)
+    return (findmax(yinterp[301:end])[1], xinterp[findmax(yinterp[301:end])[2]]+.3)
+end
+
+function linear(x::Vector, p::Vector{Float64}) # linear function
+    return p[1]*x .+ p[2]   
+end
+
+function crit(L::Vector{Int64}, T::Vector{Float32}, y::Array{Float32,2}, graph::String="") # calculate α & γ
+    ymax = Vector{Tuple}(undef, length(L))
     for l in eachindex(L)
-        yinterp=Spline1D(T, y[l,:], k=3)(xinterp)
-        push!(Max, (findmax(yinterp[301:end])[1], xinterp[findmax(yinterp[301:end])[2]]))
+        ymax[l] = interpmax(l, T, y)
     end
-    return Max
-end
-
-function linear(x, p) # linear function
-    return p[1]*x + p[2]   
-end
-
-function crit(L, T, y, graph="") # calculate α & γ
-    ymax = interpmax(L, T, y)
     println(ymax)
     fit =  curve_fit(linear, log.(L), log.(first.(ymax)), if (y=="c"); [.1,-.7]; elseif (y=="susc"); [2.,-4.]; else [.9,-.9] end)
     println(typeof(fit), "\n", fit)
@@ -164,24 +167,25 @@ function crit(L, T, y, graph="") # calculate α & γ
     return m, σ[1]
 end
 
-function critlength(T, data, t, ln=false) # Calculate critical exp or correlation length
+function critlength(T::Vector{Float32}, data::Vector, t::Real, PLOT::Bool=true, ln::Bool=false) # Calculate critical exp or correlation length (by default)
     closestT = argmin(abs.(T .- t)); println(T[closestT])
-    data=data[Int(length(Corrmean)/length(T))*closestT]
+    data=data[closestT]
     negativ = findfirst(x -> x < 1e-5, data)
-    if typeof(negativ) == Nothing; l = length(data); else; l=negativ-1; end
-    println(l)
-    x=collect(1:l)
-    fit =  curve_fit(linear, log.(x)*ln + !ln*x, log.(data[1:l]), [-.09,9.])
+    if typeof(negativ) == Nothing; n = length(data); else; n=negativ-1; end
+    println(n)
+    x=collect(1:n)
+    fit =  curve_fit(linear, log.(x)*ln + !ln*x, log.(data[1:n]), [-.09,9.])
     m,p = coef(fit); σ = stderror(fit)
 
     a=plot()
-    plot!(a, log.(x)*ln + !ln*x, log.(data[1:l]), seriestype=:scatter)
-    plot!(a, log.(x)*ln + !ln*x, m*(log.(x)*ln + !ln*x) .+p)
+    plot!(a, log.(x)*ln + !ln*x, log.(data[1:n]), seriestype=:scatter, label="data")
+    plot!(a, log.(x)*ln + !ln*x, m*(log.(x)*ln + !ln*x) .+p, label="fit")
     ylabel!(a, "Ln(Correlation)")
     if ln == true; xlabel!(a, "Ln(Distance)"); ξ=σξ=0
-    else; xlabel!(a, "Distance"); ξ =-1/m; σξ = σ[1]/m^2;end
+    else; xlabel!(a, "Distance"); ξ =-1/m; σξ = σ[1]/m^2
+    end
     title!("Correlation vs distance at T = $(T[closestT])")
-    display(a)
+    if PLOT==true;    display(a);   end
     return m*ln + !ln*ξ, σ[1]*ln+!ln*σξ
 end
 
@@ -189,7 +193,7 @@ function Correlation(spin1::Vector, spin2::Vector)  # Correlation between two sp
     return sin(spin1[2])*sin(spin2[2])*cos(spin1[1]-spin2[1]) + cos(spin1[2])*cos(spin2[2])  
 end
 
-function MeanCorrTime(Lattices)
+function MeanCorrTime(Lattices::Vector{Array{Float32, 3}})
     L = length(Lattices[1][:,1,1])
     n = length(Lattices)
     Corr = zeros(n-1)
@@ -205,7 +209,7 @@ function MeanCorrTime(Lattices)
     return Corr*L^(-2)
 end
 
-function CorrPlot(AllLattices, T_for_d, dvect, d, L, l,save=false)
+function CorrTimePlot(AllLattices::Array{Vector{Array{Float32, 3}},3}, T_for_d, dvect::Vector{Float32}, d::Int64, L::Vector{Int64}, l::Int64, save::Bool=false)
     p=plot()
     pal = cgrad([:lightblue, :green, :red])
     for i in eachindex(T_for_d[dvect[d]])
@@ -220,6 +224,37 @@ function CorrPlot(AllLattices, T_for_d, dvect, d, L, l,save=false)
     display(p)
 end
 
+function Plot_Max_C_Χ(d::Vector{Float32}, T_for_d::Dict{Float32, Vector{Float32}}, x::Array{Float32, 3}, L::Vector{Int64})
+    p=plot()
+    xmax, Tmax = Array{Float64}(undef, length(d), length(L)), Array{Float64}(undef, length(d), length(L))
+    for l in eachindex(L)
+        for z in eachindex(d)
+            xmax[z,l], Tmax[z,l] = interpmax(l, T_for_d[d[z]], x[:,:,z])
+        end
+        plot!(d, Tmax[:,l], seriestype=:scatter, label="$(L[l])")
+    end
+    ylabel!("Temperature of the maximum of C/χ")
+    xlabel!("⬅ Ising                              Value of d                              XY ➡")
+    display(p)
+    return Tmax
+end
+
+function Plot_Max_ξ(d::Vector{Float32}, T_for_d::Dict{Float32, Vector{Float32}}, Corr::Array{Vector{Float32}, 2})
+    Tmax = zeros(length(d))
+    for i in eachindex(d)
+        critic = zeros(length(T_for_d[d[i]]))
+        for j in eachindex(T_for_d[d[i]])
+            critic[j], a = critlength(T_for_d[d[i]], Corr[:,i], T_for_d[d[i]][j], false, false)
+        end
+        println(critic)
+        Tmax[i] = round(T_for_d[d[i]][argmax(critic)];digits=3)
+    end
+    p=plot(d, Tmax)
+    xlabel!("⬅ Ising                              Value of d                              XY ➡")
+    ylabel!("Temperature of the maximum of C/χ")
+    display(p)
+    return Tmax
+end
 # α : specific heat                     Ising : 0       XY : NOP Essential singularity
 # β : zero field mag                    Ising : 1/8     XY : NOP No magnetization (To have a nonzero 𝑀, the correlation function must approach a constant at large distance. But in the 2D XY model: For 𝑇>𝑇BKT: correlations decay exponentially. For 𝑇<𝑇BKT: correlations decay as a power law)
 # γ : zero field isothermal suscxx      Ising : 7/4     XY : NOP Essential divergence

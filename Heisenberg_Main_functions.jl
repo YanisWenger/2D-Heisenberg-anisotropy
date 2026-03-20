@@ -22,7 +22,7 @@ function Energy(Lattice::Array{Float32, 3}, L::Int, PBC::Bool, d::Float32)    # 
     return E
 end #   @inbounds almost divide the execution time by 2
 
-@inline function Correlation(ϕ1, θ1, ϕ2, θ2)
+@inline function Correlation(ϕ1::Float32, θ1::Float32, ϕ2::Float32, θ2::Float32)
     sin(θ1)*sin(θ2)*cos(ϕ1-ϕ2) + cos(θ1)*cos(θ2)
 end
 
@@ -192,15 +192,13 @@ function Swap(Replicas::Vector{Replica}, i::Int)    # For parallel tempering: tr
     end
 end
 
-function MHStep(step::Int, rep::Replica, L::Int, d::Float32, pIsing::Float32, pXY::Float32, PBC::Bool, pi32::Float32)   # ful MH step: i.e. lattice sweep or Wolff algorithm, and (potentially) adjust the three σ for the three gaussian proposal to be closer to a 50% acceptance rate
+function MHStep(step::Int, rep::Replica, L::Int, d::Float32, PBC::Bool, pi32::Float32)   # ful MH step: i.e. lattice sweep or Wolff algorithm, and (potentially) adjust the three σ for the three gaussian proposal to be closer to a 50% acceptance rate
     Mz2 = mean(cos.(rep.Lattice[2,:,:]).^2)
-    IsingFlip = Mz2 > .75   # require that in average [theta < pi/6 or theta > 5 pi/6] to have the possibility (with proba pIsing) to Ising-flip
-    XYFlip = Mz2 < .02      # require that in average 0.45π < theta < 0.55π to have the possibility (with proba pXY) to XY-flip (either phi or theta, independently): useful to converge faster for XY config as σϕ and σθ are tuned independently, to really have θ very close to π/2
-    if mod(step,1000)==0 && IsingFlip==true
+    if mod(step,1000)==0 && Mz2 > .7f0
         rep.Lattice, rep.E = MultipleIsingFlips(rep.Lattice, L, rep.T, pi32, d, PBC)    # Wolff algorithm
     else
-        rep.Lattice, Accept, Tr = LatticeSweep(rep.Lattice, L, rep.E, rep.T, rep.σ, rep.σϕ, rep.σθ, pi32, PBC, d, pIsing*IsingFlip, pXY*XYFlip)
-        if Tr[1] > 20
+        rep.Lattice, Accept, Tr = LatticeSweep(rep.Lattice, L, rep.E, rep.T, rep.σ, rep.σϕ, rep.σθ, pi32, PBC, d, IsingProba(Mz2), XYProba(Mz2))
+        if Tr[1] > 10
             rep.σ = min(max(rep.σ*2*Accept[1]/Tr[1], 1/sqrt(step+1000)), 10)     # if the acceptance is higher than .5, sigma should increase (decreased) to explore more (less) the phasespace to get closer to .5
         else
             if Tr[3] > 10
@@ -216,32 +214,32 @@ function MHStep(step::Int, rep::Replica, L::Int, d::Float32, pIsing::Float32, pX
     return rep
 end
 
-function MH_parallel_tempering(L::Int, N::Int, T::Vector{Float32}, burn::Int, pi32::Float32, AllLattices::Vector{Int}, d::Float32, pIsing::Float32=.6, pXY::Float32=.7, Save::Bool=false, Skip::Int=10, swap::Int=101)     # Sampler
+function MH_parallel_tempering(L::Int, N::Int, T::Vector{Float32}, burn::Int, pi32::Float32, AllLattices::Vector{Int}, d::Float32, Save::Bool=false, Skip::Int=10, swap::Int=101)     # Sampler
     nT = length(T)
     # Lattices = Array{Array{Float64,3}}(undef, nT, round(Int,2000/Skip))#-1)       # To save the last lattices
     Replicas = Vector{Replica}(undef, nT)
     for i=1:nT                              # Initialize Replicas
         lat = Initial_lattice(L, pi32)
-        Replicas[i] = Replica(lat, T[i], Energy(lat, L, PBC, d), .25f0, .2f0, .1f0, [0,0,0,0], [0,0,0,0])
+        Replicas[i] = Replica(lat, T[i], Energy(lat, L, PBC, d), .25f0, .4f0, .25f0, [0,0,0,0], [0,0,0,0])
     end
     Nswap = round(Int, N/swap)                      # number of lattice swap's try 
     Nmeasurement = round(Int, (N - burn)/Skip)      # Number of measurement (as some sweeps are not measured to save some time)
     Energies = zeros(Float32, nT, Nmeasurement)
     Mag  = zeros(Float32, nT, Nmeasurement)
-    corr = zeros(Float32, nT, length(RowCorr(Replicas[1].Lattice, L, PBC)))
+    corr = [zeros(Float32, length(RowCorr(Initial_lattice(L, pi32), L, PBC))) for _ in 1:nT]
     SwapAcceptance = zeros(Int, nT-1)
     
     for i=1:Nswap
         Threads.@threads for n=1:nT
             for j=1:swap
                 k = (i-1)*swap+j
-                Replicas[n] = MHStep(k, Replicas[n], L, d, pIsing, pXY, PBC, pi32)
+                Replicas[n] = MHStep(k, Replicas[n], L, d, PBC, pi32)
                 if mod(k, Skip) == 0 && k > burn            # to not measure every lattice sweeps
                     lat = Replicas[n].Lattice
                     m = round(Int,(k-burn)/Skip)
                     Energies[n, m] = Energy(lat, L, PBC, d)
                     Mag[n, m] = sqrt(mean(cos(phi)*sin(theta) for phi in lat[1,:,:], theta in lat[2,:,:])^2 + mean(sin(phi)*sin(theta) for phi in lat[1,:,:], theta in lat[2,:,:])^2 + mean(cos(theta) for theta in lat[2,:,:])^2)
-                    corr[n,:] += RowCorr(lat, L, PBC)
+                    corr[n] += RowCorr(lat, L, PBC)
                     # if k > N-2000
                     #     kk = round(Int,(k+2000-N)/Skip)
                     #     Lattices[n, kk] = lat
@@ -256,6 +254,7 @@ function MH_parallel_tempering(L::Int, N::Int, T::Vector{Float32}, burn::Int, pi
     end
     SwapAccept = SwapAcceptance/Nswap
     Energies /= !PBC*L*(L-1) + PBC*L^2
+    corr /= Nmeasurement
     if Save==true
         for n=1:nT
             accept = Replicas[n].Acceptance ./ Replicas[n].Try
@@ -266,7 +265,7 @@ function MH_parallel_tempering(L::Int, N::Int, T::Vector{Float32}, burn::Int, pi
     # for i in eachindex(Lattices)
     #     if !isassigned(Lattices,i); println(i);end
     # end
-    for n=1:nT; println("$L \t $d \t $(T[n]) \t $(Replicas[n].Acceptance ./ Replicas[n].Try) \t and Mag2 : $(mean(cos.(Replicas[n].Lattice[2,:,:]).^2))"); end
+    for n=1:nT; println("$L \t $d \t $(T[n]) \t $(Replicas[n].Acceptance ./ Replicas[n].Try) \t and Magz2 : $(mean(cos.(Replicas[n].Lattice[2,:,:]).^2))"); end
     return mean(Energies[1,:]), #=mean(Energies2[1,:]),=# mean(Mag[1,:])
 end
 
@@ -300,15 +299,20 @@ function RowCorr(Lattice::Array{Float32, 3}, L::Int, PBC::Bool)   # Return the a
     return corr
 end
 
-function Temperatures(Tmin::Float64, Tmax::Float64, N::Int)
-    R = (Tmax/Tmin)^(1/(N-1))
-    return Float32.(round.(Tmin .* R .^ (0:N-1); digits=3))
+@inline function Temperatures(Tmin::Float64, Tmax::Float64, N::Int)
+    return Float32.(round.(Tmin .* (Tmax/Tmin) .^ ((0:N-1)/(N-1)); digits=3))
 end
 
+@inline @fastmath function IsingProba(Mz2::Float32)   # Probability of Ising-flip, just a choice, there is no perfect one
+    return (1.9f0*Mz2 .-.95f0).^2 .*(sign.(Mz2 .- .5f0).+1)/2
+end
+
+@inline @fastmath function XYProba(Mz2::Float32)      # Probability of XY-flip (either phi or theta, independently): useful to converge faster for XY config as σϕ and σθ are tuned independently, to really have θ very close to π/2
+    return (.9f0 .- 9f0*Mz2).^2 .*(sign.(.1f0 .-Mz2).+1)/2
+end # just a choice, there is no perfect one
 
 
 
 #   @inline     directly put the code of the function where the function is called, instead of really calling it    for single line function, no need "return" inside it
 #   @fastmath   allows to reorder operation to save a bit of time (sometimes less precise because of floating point handling)
 #   @inbounds   don't check if wanted component exist example     x=vector[n]     Doesn't check that the n-th component even exists, just trust the process
-#   @view       extract without slicing (no allocations)R

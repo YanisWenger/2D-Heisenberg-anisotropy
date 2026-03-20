@@ -4,10 +4,8 @@ include("./Heisenberg_Main_functions.jl")
 N=20000                         # Number of lattice sweeps
 burn = Int(min(N/4,100000))     # Burning period
 L=[8,12]                        # Lattice sizes
-T=Temperatures(.6,1.6,4)        # Temperatures
-d=Float32.([-1,1])              # anysotropic term
-pIsing = .6f0
-pXY = .7f0
+T=Temperatures(.65,1.15,8)        # Temperatures
+d=Float32.([-1,1])              # anisotropic term
 PBC   = true                    # Periodic Boundary Conditions
 pi32  = Float32(π)
 Save  = true
@@ -16,7 +14,7 @@ println("  --  $N sweeps  --  ")
 starttime = time()
 for z in d
     for l in L
-        E1, M1 = MH_parallel_tempering(l, N, T, burn, pi32, L, z, pIsing, pXY, Save)
+        E1, M1 = MH_parallel_tempering(l, N, T, burn, pi32, L, z, Save)
     end
 end
 t = round(Int, time()-starttime)
@@ -27,5 +25,8 @@ end
 println(t)
 
 
-# cut of for pXY and pIsing
 # C, Susc and Corr max
+
+# For the real big simulations, which T should I care of?  Is is good to have a rough simulations to then see at which T we should simulate for all L and d
+
+# Correlation : actually only correlation in rows, for all the rows and all element in a row with its L/2-1 neighbor (in each side)
