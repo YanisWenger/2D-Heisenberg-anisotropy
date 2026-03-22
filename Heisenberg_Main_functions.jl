@@ -93,7 +93,7 @@ function NewSpin(spin::Vector{Float32}, σ::Float32, σϕ::Float32, σθ::Float3
         Whichflip = 1
         spin = NewPhiTheta(spin, σ, pi32)
     else
-        random = rand(TaskLocalRNG())       # To generate less random number
+        random = rand(TaskLocalRNG())       # This way to generate less random number, thus faster code
         if pIsing > 0 && random < pIsing
             Whichflip = 2
             spin[2] = pi32 - spin[2]
@@ -200,13 +200,14 @@ function MHStep(step::Int, rep::Replica, L::Int, d::Float32, PBC::Bool, pi32::Fl
         rep.Lattice, Accept, Tr = LatticeSweep(rep.Lattice, L, rep.E, rep.T, rep.σ, rep.σϕ, rep.σθ, pi32, PBC, d, IsingProba(Mz2), XYProba(Mz2))
         if Tr[1] > 10
             rep.σ = min(max(rep.σ*2*Accept[1]/Tr[1], 1/sqrt(step+1000)), 10)     # if the acceptance is higher than .5, sigma should increase (decreased) to explore more (less) the phasespace to get closer to .5
-        else
-            if Tr[3] > 10
-                rep.σϕ = min(max(rep.σϕ*2*Accept[3]/Tr[3], 1/sqrt(step+1000)), 10)     # if the acceptance is higher than .5, sigma should increase (decreased) to explore more (less) the phasespace to get closer to .5
-            end
-            if Tr[4] > 10
-                rep.σθ = min(max(rep.σθ*2*Accept[4]/Tr[4], 1/sqrt(step+10000)), 2)     # if the acceptance is higher than .5, sigma should increase (decreased) to explore more (less) the phasespace to get closer to .5
-            end
+        end
+        if Tr[3] > 0
+            a = 1/(Tr[3]+2)
+            rep.σϕ = min(max(rep.σϕ*2*min(max(Accept[3]/Tr[3], a), 1-a), 1/sqrt(step + 1000)), 10)     # if the acceptance is higher than .5, sigma should increase (decreased) to explore more (less) the phasespace to get closer to .5
+        end         # I could have used clamp(a,b,c) instead of min(max(a,c),b) but it is less efficient (around 50% slower)
+        if Tr[4] > 0
+            a = 1/(Tr[4]+2)
+            rep.σθ = min(max(rep.σθ*2*min(max(Accept[4]/Tr[4], a), 1-a), 1/sqrt(step+10000)), 2)     # if the acceptance is higher than .5, sigma should increase (decreased) to explore more (less) the phasespace to get closer to .5
         end
         rep.Acceptance += Accept
         rep.Try += Tr
