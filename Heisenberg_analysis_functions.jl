@@ -47,7 +47,7 @@ function Errorpropagation(v::Vector{Any}, Δ::Float32) # propagation of error fo
     return sqrt(sum((v .- mean(v)).^2)/length(v))*2*Δ
 end
 
-function plotL(L::Vector{Int64}, T_for_d::Dict{Float32, Vector{Float32}}, dvect::Vector{Float32}, d::Real, x::Array{Float32, 3}, ytitle::String="", error=[], save::Bool=false)   # read data from a file and plot it
+function plotL(L::Vector{Int64}, T_for_d::Dict{Float32, Vector{Float32}}, dvect::Vector{Float32}, x::Array{Float32, 3}, d::Int64, ytitle::String="", error=[], save::Bool=false)   # read data from a file and plot it
     i = findfirst(==(d), dvect)
     endT = length(x[1,:,i])
     while endT >= 1 && x[1,endT,i]==0
@@ -55,7 +55,7 @@ function plotL(L::Vector{Int64}, T_for_d::Dict{Float32, Vector{Float32}}, dvect:
     end
     p=plot()
     if typeof(x) == Matrix{Any}
-        for t=1:max(round(Int, length(T_for_d[d])/8),1):length(T_for_d[d])
+        for t=1:max(round(Int, length(T_for_d[dvect[d]])/8),1):length(T_for_d[dvect[d]])
             plot!(collect(1:Int(L[end]/2-1)), x[end,:][t], label="$(T[t])",legend=:topright) # yet not update to work
         end
         title!(p, "Correlation (L=$(L[end])) as a function of distance")
@@ -66,14 +66,14 @@ function plotL(L::Vector{Int64}, T_for_d::Dict{Float32, Vector{Float32}}, dvect:
             else; lim = :auto
             end
             for l in eachindex(L)
-                plot!(T_for_d[d], x[l, 1:endT,i], yerr = Vector(error[l,1:endT,i]), markerstrokecolor=:auto, label="$(L[l])", ylims = lim)
+                plot!(T_for_d[dvect[d]], x[l, 1:endT,i], yerr = Vector(error[l,1:endT,i]), markerstrokecolor=:auto, label="$(L[l])", ylims = lim)
             end
         else
             for l in eachindex(L)
-                plot!(T_for_d[d], x[l, 1:endT,i], label="$(L[l])", ylims=(max(0, minimum(x[:,1:endT,i])),maximum(x[:,1:endT,i])))
+                plot!(T_for_d[dvect[d]], x[l, 1:endT,i], label="$(L[l])", ylims=(max(0, minimum(x[:,1:endT,i])),maximum(x[:,1:endT,i])))
             end
         end
-        title!(p, ytitle*" as a function of T with d = $d")
+        title!(p, ytitle*" as a function of T with d = $(dvect[d])")
         xlabel!(p, "Temperature")
     end
     ylabel!(p, ytitle)
@@ -195,12 +195,12 @@ function CorrelationFunction(L::Int64, x::Vector, p::Vector{Float64})
     return ℯ^(2*π*p[2]*G(x))*(ℯ^(-x/p[1])+ℯ^(-(L+x)/p[1]))
 end
 
-function G(x::Vector{Int64}, Nk::Int64=10)
+function G(x::Vector{Int64}, Nk::Int64=100)
     y=zeros(length(x))
-    for k=-Nk:Nk
-        y += ℯ.^(im*k*x) / (1-cos(k))
+    for k=1:Nk
+        y += (cos.(k*x).-1) / (1-cos(k))
     end
-    return y/(2Nk+1)
+    return y/Nk
 end
 
 function Correlation(spin1::Vector, spin2::Vector)  # Correlation between two spins

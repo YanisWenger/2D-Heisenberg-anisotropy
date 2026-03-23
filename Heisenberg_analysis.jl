@@ -3,21 +3,12 @@ include("./Heisenberg_analysis_functions.jl")
 
 Nbin = 9000     # Number of bins (has to be a divisor of Nmeasurement = (Nstep-burn)/Skip)
 PBC=true        # Periodic Boundary Conditions
-N = 1040_000    # Ising
-N = 1100_000    # XY
-N = 1000_000    # XYZ
-L = [8,12,20,32]  # Lattices size
-L = [8, 12, 20]
+N = 1000_000    # Number of lattice sweeps
+L = [8, 12, 20] # Lattices size
 
-N=20000
-L=[8,12]
+T, d, T_for_d = Get_T_d(N, L)   # Obtain Temperature and anisotropic term in Data/$(L)_$N i.e. Data/[8, 12, 20]_1000000
 
-N = 50_000_000
-L=[10]
-
-T, d, T_for_d = Get_T_d(N, L)   # Obtain Temperature and anisotropic term
-
-nL, nT, nd  =   length(L), length(T), length(d) # number of different lattices, temperatures and d
+nL, nT, nd  =   length(L), length(T), length(d) # number of different lattices, temperatures and anisotropic term
 E, EΔ       =   zeros(Float32, nL, nT, nd), zeros(Float32, nL, nT, nd)
 M, MΔ       =   zeros(Float32, nL, nT, nd), zeros(Float32, nL, nT, nd)
 χ, χΔ       =   zeros(Float32, nL, nT, nd), zeros(Float32, nL, nT, nd)
@@ -49,13 +40,13 @@ for l in eachindex(L)
 end
 println(SwapAccept)
 
-plotL(L, T_for_d, d, 1000.0, M, "M", MΔ)    # fourth number for the value of d
-plotL(L, T_for_d, d, 1000.0, χ, "Susc", χΔ)
-plotL(L, T_for_d, d, 0.0, E, "E", EΔ)
-plotL(L, T_for_d, d, 1000.0, C, "C", CΔ)
+plotL(L, T_for_d, d, M, 1, "M", MΔ)    # Plot all lattice sizes for the same d.    Fifth entry for which d
+plotL(L, T_for_d, d, χ, 1, "Susc", χΔ)
+plotL(L, T_for_d, d, E, 1, "E", EΔ)
+plotL(L, T_for_d, d, C, 1, "C", CΔ)
 
-plotd(L, T_for_d, d, χ, "Susc", χΔ,2)
-plotd(L, T_for_d, d, C, "C", CΔ, 3)     # last number for lattice size : L[#]
+plotd(L, T_for_d, d, χ, "Susc", χΔ,2)   # Plot all the d for a given lattice size (last number for lattice size : L[#], the bigger one by default)
+plotd(L, T_for_d, d, C, "C", CΔ, 3)
 plotd(L, T_for_d, d, C, "C", CΔ2, 2)    # last number for lattice size : L[#]
 plotd(L, T_for_d, d, E, "E", EΔ)
 plotd(L, T_for_d, d, M, "M", MΔ)
@@ -75,10 +66,9 @@ println(α, "\n", σα, "\n\n", γ, "\n", σγ)
 Plot_Max_ξ(d, T_for_d, Corr[1,:,:])
 
 
-CorrTimePlot(AllLattices, T_for_d, d, 3, L, 2, false)   # first number for which d, second for which L
+# CorrTimePlot(AllLattices, T_for_d, d, 3, L, 2, false)   # Works only when lattices have been saved in the simulation process, doesn't by default.   Fourth element for which d, sixth for which L
 
-swap = [x for cell in SwapAccept for x in cell]
-histogram(swap)
+histogram([x for cell in SwapAccept for x in cell])
 
 
 
@@ -89,7 +79,7 @@ interpmax(2, T, C[:,:,1])
 Plot_Max_C_Χ(d, T_for_d, χ, L, "Susc", true)
 Plot_Max_C_Χ(d, T_for_d, C, L, "C", true)
 
-Plot_Max_ξ(d, T_for_d, Corr[end,:,:])
+Plot_Max_ξ(d, T_for_d, Corr[end,:,:]) # bad for now as it always try to fit an exponential, but below Tc, this is a power law
 
 
 
@@ -103,7 +93,7 @@ Plot_Max_ξ(d, T_for_d, Corr[end,:,:])
 
 
 
-
+#########################    To find the right amount of measurements per bin    ###############################################################3
 
 function whichbin(vect)
     n = sort(divisors(length(vect)))
