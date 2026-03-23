@@ -21,7 +21,7 @@ nL, nT, nd  =   length(L), length(T), length(d) # number of different lattices, 
 E, EΔ       =   zeros(Float32, nL, nT, nd), zeros(Float32, nL, nT, nd)
 M, MΔ       =   zeros(Float32, nL, nT, nd), zeros(Float32, nL, nT, nd)
 χ, χΔ       =   zeros(Float32, nL, nT, nd), zeros(Float32, nL, nT, nd)
-C, CΔ, CΔ2       =   zeros(Float32, nL, nT, nd), zeros(Float32, nL, nT, nd), zeros(Float32, nL, nT, nd)
+C, CΔ, CΔ2  =   zeros(Float32, nL, nT, nd), zeros(Float32, nL, nT, nd), zeros(Float32, nL, nT, nd)
 Acceptance  =   zeros(4, nL, nT, nd)
 Corr        =   Array{Vector{Float32}}(undef, nL, nT, nd)
 # AllLattices =   Array{Any}(undef, nL, nT, nd) # for Correlation time (do not exists by default)
@@ -49,14 +49,14 @@ for l in eachindex(L)
 end
 println(SwapAccept)
 
-plotL(L, T_for_d, d, 1000.0, M, "M", MΔ) # fourth number for the value of d
+plotL(L, T_for_d, d, 1000.0, M, "M", MΔ)    # fourth number for the value of d
 plotL(L, T_for_d, d, 1000.0, χ, "Susc", χΔ)
 plotL(L, T_for_d, d, 0.0, E, "E", EΔ)
 plotL(L, T_for_d, d, 1000.0, C, "C", CΔ)
 
 plotd(L, T_for_d, d, χ, "Susc", χΔ,2)
-plotd(L, T_for_d, d, C, "C", CΔ, 3) # last number for lattice size : L[#]
-plotd(L, T_for_d, d, C, "C", CΔ2, 2) # last number for lattice size : L[#]
+plotd(L, T_for_d, d, C, "C", CΔ, 3)     # last number for lattice size : L[#]
+plotd(L, T_for_d, d, C, "C", CΔ2, 2)    # last number for lattice size : L[#]
 plotd(L, T_for_d, d, E, "E", EΔ)
 plotd(L, T_for_d, d, M, "M", MΔ)
 
@@ -71,11 +71,11 @@ println(α, "\n", σα, "\n\n", γ, "\n", σγ)
 
 
 
-ξ, σξ = critlength(T, Corr[1,:,1], 1.0, true) # third entry for the wanted temperature, fourth to plot or not, fifth component to "true" to get exponent of the algebraic decay instead of correlation length
+ξ, σξ = critlength(T, Corr[1,:,1], 1.0, true)           # third entry for the wanted temperature, fourth to plot or not, fifth component to "true" to get exponent of the algebraic decay instead of correlation length
 Plot_Max_ξ(d, T_for_d, Corr[1,:,:])
 
 
-CorrTimePlot(AllLattices, T_for_d, d, 3, L, 2, false) # first number for which d, second for which L
+CorrTimePlot(AllLattices, T_for_d, d, 3, L, 2, false)   # first number for which d, second for which L
 
 swap = [x for cell in SwapAccept for x in cell]
 histogram(swap)
@@ -86,7 +86,8 @@ crit(L, T_for_d[d[1]], C[:,:,1])
 
 interpmax(2, T, C[:,:,1])
 
-Plot_Max_C_Χ(d, T_for_d, χ, L)
+Plot_Max_C_Χ(d, T_for_d, χ, L, "Susc", true)
+Plot_Max_C_Χ(d, T_for_d, C, L, "C", true)
 
 Plot_Max_ξ(d, T_for_d, Corr[end,:,:])
 
@@ -108,9 +109,12 @@ function whichbin(vect)
     n = sort(divisors(length(vect)))
     bin = zeros(length(n)-1)
     for i=1:length(bin)
-        bin[i] = std(Binor2nd(vect, n[i+1],.772f0, 12))
+        bin[75-i] = std(Binor2nd(vect, n[i+1],.772f0, 12))
     end
-    # display(plot(bin))
+    p=plot(n[1:74],bin,  xaxis = :log10)
+    title!("Error bar vs measurement's number per bin)")
+    # savefig("Plot/Errorbars.pdf")
+    display(p)
     return maximum(bin), argmax(bin)
 end
 
@@ -128,4 +132,7 @@ minimum(Bestbin)
 maximum(Bestbin)
 mean(Bestbin)
 n = sort(divisors(90000))
-n[72]
+n[5]
+
+Data = load("Data/$(L)_$N/12_0.65_0.2.jld2")[:"Energies"]
+a, Bestbin = whichbin(Data)

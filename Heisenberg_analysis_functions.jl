@@ -120,9 +120,7 @@ function plotd(L::Vector{Int64}, T_for_d::Dict{Float32, Vector{Float32}}, d::Vec
     title!(p, ytitle*" as a function of T for $(L[i])x$(L[i]) lattices")
     xlabel!(p, "Temperature")
     ylabel!(p, ytitle)
-    if save == true
-        savefig("Plot/"*ytitle*".pdf")
-    end
+    if save; savefig("Plot/"*ytitle*".pdf"); end
     display(p)
 end
 
@@ -142,7 +140,7 @@ function interpmax(l::Int64, T::Vector{Float32}, y::Array{Float32,2}) # interpol
     return (findmax(yinterp[301:end])[1], xinterp[findmax(yinterp[301:end])[2]]+.3)
 end
 
-function linear(x::Vector, p::Vector{Float64}) # linear function
+function linear(x::Vector, p::Vector{Float64, 2}) # linear function
     return p[1]*x .+ p[2]   
 end
 
@@ -189,6 +187,22 @@ function critlength(T::Vector{Float32}, data::Vector, t::Real, PLOT::Bool=true, 
     return m*ln + !ln*ξ, σ[1]*ln+!ln*σξ
 end
 
+function CritLength()
+   return 0
+end
+
+function CorrelationFunction(L::Int64, x::vector, p::Vector{Float64, 2})
+    return ℯ^(2*π*p[2]*G(x))*(ℯ^(-x/p[1])+ℯ^(-(L+x)/p[1]))
+end
+
+function G(x::Vector{Int64}, Nk::Int64=10)
+    y=zeros(length(x))
+    for k=-Nk:Nk
+        y += ℯ.^(im*k*x) / (1-cos(k))
+    end
+    return y/(2Nk+1)
+end
+
 function Correlation(spin1::Vector, spin2::Vector)  # Correlation between two spins
     return sin(spin1[2])*sin(spin2[2])*cos(spin1[1]-spin2[1]) + cos(spin1[2])*cos(spin2[2])  
 end
@@ -224,7 +238,7 @@ function CorrTimePlot(AllLattices::Array{Vector{Array{Float32, 3}},3}, T_for_d, 
     display(p)
 end
 
-function Plot_Max_C_Χ(d::Vector{Float32}, T_for_d::Dict{Float32, Vector{Float32}}, x::Array{Float32, 3}, L::Vector{Int64})
+function Plot_Max_C_Χ(d::Vector{Float32}, T_for_d::Dict{Float32, Vector{Float32}}, x::Array{Float32, 3}, L::Vector{Int64}, title::String="C/χ", save::Bool=false)
     p=plot()
     xmax, Tmax = Array{Float64}(undef, length(d), length(L)), Array{Float64}(undef, length(d), length(L))
     for l in eachindex(L)
@@ -233,8 +247,10 @@ function Plot_Max_C_Χ(d::Vector{Float32}, T_for_d::Dict{Float32, Vector{Float32
         end
         plot!(d, Tmax[:,l], seriestype=:scatter, label="$(L[l])")
     end
-    ylabel!("Temperature of the maximum of C/χ")
+    title!("Tpic of $title vs d")
+    ylabel!("Temperature of the maximum of $title")
     xlabel!("⬅ Ising                              Value of d                              XY ➡")
+    if save; savefig("Plot/Tpic_$title.pdf"); end
     display(p)
     return Tmax
 end
@@ -251,7 +267,7 @@ function Plot_Max_ξ(d::Vector{Float32}, T_for_d::Dict{Float32, Vector{Float32}}
     end
     p=plot(d, Tmax)
     xlabel!("⬅ Ising                              Value of d                              XY ➡")
-    ylabel!("Temperature of the maximum of C/χ")
+    ylabel!("Temperature of the maximum of ξ")
     display(p)
     return Tmax
 end
@@ -262,3 +278,5 @@ end
 # ν : corr length                       Ising : 1       XY : NOP 𝜉 diverges exponentially
 
 # continuous symmetries cannot be spontaneously broken in 2D
+
+G([-1,0,1])
