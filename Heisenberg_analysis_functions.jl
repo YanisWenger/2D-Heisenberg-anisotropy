@@ -140,8 +140,8 @@ function interpmax(l::Int64, T::Vector{Float32}, y::Array{Float32,2}) # interpol
     return (findmax(yinterp[301:end])[1], xinterp[findmax(yinterp[301:end])[2]]+.3)
 end
 
-function linear(x::Vector, p::Vector{Float64, 2}) # linear function
-    return p[1]*x .+ p[2]   
+function linear(x::Vector, p::Vector{Float64}) # linear function
+    return p[1]*x .+ p[2]
 end
 
 function crit(L::Vector{Int64}, T::Vector{Float32}, y::Array{Float32,2}, graph::String="") # calculate α & γ
@@ -191,7 +191,7 @@ function CritLength()
    return 0
 end
 
-function CorrelationFunction(L::Int64, x::vector, p::Vector{Float64, 2})
+function CorrelationFunction(L::Int64, x::Vector, p::Vector{Float64})
     return ℯ^(2*π*p[2]*G(x))*(ℯ^(-x/p[1])+ℯ^(-(L+x)/p[1]))
 end
 
@@ -278,5 +278,3 @@ end
 # ν : corr length                       Ising : 1       XY : NOP 𝜉 diverges exponentially
 
 # continuous symmetries cannot be spontaneously broken in 2D
-
-G([-1,0,1])
