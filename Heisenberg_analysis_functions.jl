@@ -14,10 +14,9 @@ function Get_T_d(N::Int64, L::Vector{Int64}, End::String="")  # for the first la
         (; n2 = nums[2], n3 = nums[3])
     end
 
-    # all_L = [p.n1 for p in parsed]  # Vector of all L
     all_d = unique(sort([p.n3 for p in parsed]))    # Vector of all d
     all_T = unique(sort([p.n2 for p in parsed]))    # Vector of all T
-    T_for_d = Dict{Float32, Vector{Float32}}() # Dictionary mapping each #3 → list of #2
+    T_for_d = Dict{Float32, Vector{Float32}}() # Dictionary mapping each #3 -> list of #2
     for p in parsed
         push!(get!(T_for_d, p.n3, Float32[]), p.n2)
     end
@@ -54,21 +53,21 @@ function plotL(L::Vector{Int64}, T_for_d::Dict{Float32, Vector{Float32}}, dvect:
         endT -= 1
     end
     p=plot()
-    if typeof(x) == Matrix{Any}
+    if typeof(x) == Matrix{Any}     # For Correlation length
         for t=1:max(round(Int, length(T_for_d[dvect[d]])/8),1):length(T_for_d[dvect[d]])
             plot!(collect(1:Int(L[end]/2-1)), x[end,:][t], label="$(T[t])",legend=:topright) # yet not update to work
         end
         title!(p, "Correlation (L=$(L[end])) as a function of distance")
         xlabel!(p, "Distance (site)")
     else
-        if error != []
+        if error != []  # if there are error bars
             if ytitle=="C" || ytitle=="Susc"; lim=(max(0, minimum(x[:,:,i])),maximum(x[:,3:end,i])+maximum(error[:,3:end,i]))
             else; lim = :auto
             end
             for l in eachindex(L)
                 plot!(T_for_d[dvect[d]], x[l, 1:endT,i], yerr = Vector(error[l,1:endT,i]), markerstrokecolor=:auto, label="$(L[l])", ylims = lim)
             end
-        else
+        else            # if there are no error bars
             for l in eachindex(L)
                 plot!(T_for_d[dvect[d]], x[l, 1:endT,i], label="$(L[l])", ylims=(max(0, minimum(x[:,1:endT,i])),maximum(x[:,1:endT,i])))
             end
@@ -90,7 +89,7 @@ function plotd(L::Vector{Int64}, T_for_d::Dict{Float32, Vector{Float32}}, d::Vec
     p=plot()
     pal = cgrad([RGB(.4,.6,1), RGB(0,0,.5), RGB(0,0,0), RGB(.6,0,0), RGB(1,.6,.6)], [0., .4999, .5, .5001, 1.], categorical = false)
     if error != [] 
-        if ytitle=="C"#= || ytitle=="Susc"=#; lim=(max(0, minimum(x[i,:,:])),maximum(x[i,3:end,:])+maximum(error[i,3:end,:]))
+        if ytitle=="C"; lim=(max(0, minimum(x[i,:,:])),maximum(x[i,3:end,:])+maximum(error[i,3:end,:]))
         else; lim = :auto
         end
         for z in eachindex(d)
@@ -104,7 +103,7 @@ function plotd(L::Vector{Int64}, T_for_d::Dict{Float32, Vector{Float32}}, d::Vec
             plot!(T_for_d[d[z]], x[i, 1:endT, z].-rescaleE, yerr = Vector(error[i, 1:endT, z]), label="$(d[z])", ylims=lim, seriescolor = pal[n], linecolor = pal[n], markercolor = pal[n], markerstrokecolor = pal[n], ecolor = pal[n])
         end
     else
-        if ytitle=="C"#= || ytitle=="Susc"=#; lim=(max(0, minimum(x[i,:,:])),maximum(x[i,3:end,:]))
+        if ytitle=="C"; lim=(max(0, minimum(x[i,:,:])),maximum(x[i,3:end,:]))
         end
         for z in eachindex(d)
             endT = length(x[i,:,z])
