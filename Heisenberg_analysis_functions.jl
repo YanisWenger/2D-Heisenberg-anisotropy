@@ -24,18 +24,16 @@ function Get_T_d(N::Int64, L::Vector{Int64}, End::String="")  # for the first la
     return all_T, all_d, T_for_d
 end
 
-function Binor(arr::Vector{Float32}, Nbin::Int64) # take them Nbin by Nbin and average each the bins.
+function Binor(arr::Vector{Float32}, Nbin::Int64, Nperbin::Int64) # take them Nbin by Nbin and average each the bins.
     Bins=[]
-    Nperbin = round(Int, length(arr)/Nbin)
     for i=1:Nbin
         push!(Bins, mean(arr[((i-1)*Nperbin)+1:i*Nperbin]))
     end
     return Bins
 end
 
-function Binor2nd(arr::Vector{Float32}, Nbin::Int64, T::Float32, L::Int64) # errorbar for c and Χ
+function Binor2nd(arr::Vector{Float32}, Nbin::Int64, Nperbin::Int64, T::Float32, L::Int64) # errorbar for c and Χ
     Bins=[]
-    Nperbin = round(Int, length(arr)/Nbin)
     for i=1:Nbin
         push!(Bins, (mean(arr[(i-1)*Nperbin+1:i*Nperbin].^2) - mean(arr[(i-1)*Nperbin+1:i*Nperbin])^2)/T*L^2)
     end
@@ -47,9 +45,8 @@ function Errorpropagation(v::Vector{Any}, Δ::Float32) # propagation of error fo
 end
 
 function plotL(L::Vector{Int64}, T_for_d::Dict{Float32, Vector{Float32}}, dvect::Vector{Float32}, x::Array{Float32, 3}, d::Int64, ytitle::String="", error=[], save::Bool=false)   # read data from a file and plot it
-    i = findfirst(==(d), dvect)
-    endT = length(x[1,:,i])
-    while endT >= 1 && x[1,endT,i]==0
+    endT = length(x[1,:,d])
+    while endT >= 1 && x[1,endT,d]==0
         endT -= 1
     end
     p=plot()
@@ -61,15 +58,15 @@ function plotL(L::Vector{Int64}, T_for_d::Dict{Float32, Vector{Float32}}, dvect:
         xlabel!(p, "Distance (site)")
     else
         if error != []  # if there are error bars
-            if ytitle=="C" || ytitle=="Susc"; lim=(max(0, minimum(x[:,:,i])),maximum(x[:,3:end,i])+maximum(error[:,3:end,i]))
+            if ytitle=="C" || ytitle=="Susc"; lim=(max(0, minimum(x[:,:,d])),maximum(x[:,3:end,d])+maximum(error[:,3:end,d]))
             else; lim = :auto
             end
             for l in eachindex(L)
-                plot!(T_for_d[dvect[d]], x[l, 1:endT,i], yerr = Vector(error[l,1:endT,i]), markerstrokecolor=:auto, label="$(L[l])", ylims = lim)
+                plot!(T_for_d[dvect[d]], x[l, 1:endT,d], yerr = Vector(error[l,1:endT,d]), markerstrokecolor=:auto, label="$(L[l])", ylims = lim)
             end
         else            # if there are no error bars
             for l in eachindex(L)
-                plot!(T_for_d[dvect[d]], x[l, 1:endT,i], label="$(L[l])", ylims=(max(0, minimum(x[:,1:endT,i])),maximum(x[:,1:endT,i])))
+                plot!(T_for_d[dvect[d]], x[l, 1:endT,d], label="$(L[l])", ylims=(max(0, minimum(x[:,1:endT,i])),maximum(x[:,1:endT,i])))
             end
         end
         title!(p, ytitle*" as a function of T with d = $(dvect[d])")
@@ -79,9 +76,8 @@ function plotL(L::Vector{Int64}, T_for_d::Dict{Float32, Vector{Float32}}, dvect:
     if save ==true
         savefig("Plot/"*ytitle*".pdf")
     end
-    println("size vect: ", size(x))
-    println("size vect[end,:,i]: ", size(x[end,:,i]))
-    println("endT: ", endT)
+    # println("size vect: ", size(x))
+    # println("endT: ", endT)
     display(p)
 end
 
@@ -134,40 +130,40 @@ function PlotColord(x::Float32, dmin::Float32, dmax::Float32)
 end
 
 function interpmax(l::Int64, T::Vector{Float32}, y::Array{Float32,2}) # interpolate and find the Tmax (for all Lattice size)
-    xinterp = collect(.6:.001:2)
+    xinterp = collect(.5:.001:2)
     yinterp=Spline1D(T, y[l,:], k=3)(xinterp)
-    return (findmax(yinterp[301:end])[1], xinterp[findmax(yinterp[301:end])[2]]+.3)
+    return (findmax(yinterp)[1], xinterp[findmax(yinterp)[2]])
 end
 
 function linear(x::Vector, p::Vector{Float64}) # linear function
     return p[1]*x .+ p[2]
 end
 
-function crit(L::Vector{Int64}, T::Vector{Float32}, y::Array{Float32,2}, graph::String="") # calculate α & γ
+function crit(L::Vector{Int64}, T::Vector{Float32}, y::Array{Float32,2}, title::String="") # calculate α & γ, plot if title is a non-empty string
     ymax = Vector{Tuple}(undef, length(L))
     for l in eachindex(L)
         ymax[l] = interpmax(l, T, y)
     end
     println(ymax)
     fit =  curve_fit(linear, log.(L), log.(first.(ymax)), if (y=="c"); [.1,-.7]; elseif (y=="susc"); [2.,-4.]; else [.9,-.9] end)
-    println(typeof(fit), "\n", fit)
-    m,p = coef(fit)
-    σ = stderror(fit)
-    if graph!=""
-        a=plot()
+    println(#=typeof(fit), "\n",=# fit)
+    m, p = coef(fit)
+    σm, σp = stderror(fit)
+    if title != ""
+        a = plot()
         plot!(a, log.(L), log.(first.(ymax)), seriestype=:scatter)
         plot!(a, log.(L), m*log.(L) .+p)
         xlabel!(a, "Ln(Lattice length)")
-        ylabel!(a, "Ln(max("*graph*"))")
+        ylabel!(a, "Ln(max("*title*"))")
         display(a)
     end
-    return m, σ[1]
+    return m, σm
 end
 
 function critlength(T::Vector{Float32}, data::Vector, t::Real, PLOT::Bool=true, ln::Bool=false) # Calculate critical exp or correlation length (by default)
     closestT = argmin(abs.(T .- t)); println(T[closestT])
     data=data[closestT]
-    negativ = findfirst(x -> x < 1e-5, data)
+    negativ = findfirst(x -> x < 4e-4, data)
     if typeof(negativ) == Nothing; n = length(data); else; n=negativ-1; end
     println(n)
     x=collect(1:n)
@@ -186,12 +182,18 @@ function critlength(T::Vector{Float32}, data::Vector, t::Real, PLOT::Bool=true, 
     return m*ln + !ln*ξ, σ[1]*ln+!ln*σξ
 end
 
-function CritLength()
-   return 0
+function CritLength(corr::Vector, L::Int64)
+    model(x, p) = CorrelationFunction(L, x, p)
+    xdata = Int.(collect(1:L/2-1))
+    fit = curve_fit(model, xdata, corr, [3.1, 3.1])    # [..,..] random guess
+    p=plot(xdata, corr)
+    plot!(xdata, CorrelationFunction(L, xdata, coef(fit)))
+    display(p)
+    return coef(fit), stderror(fit)
 end
 
-function CorrelationFunction(L::Int64, x::Vector, p::Vector{Float64})
-    return ℯ^(2*π*p[2]*G(x))*(ℯ^(-x/p[1])+ℯ^(-(L+x)/p[1]))
+function CorrelationFunction(L::Int64, x::Vector{Int64}, p::Vector{Float64})
+    return exp.(2π*p[2].*G(x)).*(exp.(-x/p[1])+exp.(-(L.+x)/p[1]))
 end
 
 function G(x::Vector{Int64}, Nk::Int64=100)
@@ -251,15 +253,24 @@ function Plot_Max_C_Χ(d::Vector{Float32}, T_for_d::Dict{Float32, Vector{Float32
     xlabel!("⬅ Ising                              Value of d                              XY ➡")
     if save; savefig("Plot/Tpic_$title.pdf"); end
     display(p)
-    return Tmax
+    p=plot()
+    for l in eachindex(L)
+        plot!(d, xmax[:,l], seriestype=:scatter, label="$(L[l])")
+    end
+    title!("$title max vs d")
+    ylabel!("Mximum of $title")
+    xlabel!("⬅ Ising                              Value of d                              XY ➡")
+    if save; savefig("Plot/$(title)_max.pdf"); end
+    display(p)
+    return Tmax, xmax
 end
 
-function Plot_Max_ξ(d::Vector{Float32}, T_for_d::Dict{Float32, Vector{Float32}}, Corr::Array{Vector{Float32}, 2})
+function Plot_Max_ξ(d::Vector{Float32}, T_for_d::Dict{Float32, Vector{Float32}}, Corr::Array{Vector{Float32}, 2}, ln::Bool=false)
     Tmax = zeros(length(d))
     for i in eachindex(d)
         critic = zeros(length(T_for_d[d[i]]))
         for j in eachindex(T_for_d[d[i]])
-            critic[j], a = critlength(T_for_d[d[i]], Corr[:,i], T_for_d[d[i]][j], false, false)
+            critic[j], a = critlength(T_for_d[d[i]], Corr[:,i], T_for_d[d[i]][j], true, ln)
         end
         println(critic)
         Tmax[i] = round(T_for_d[d[i]][argmax(critic)];digits=3)

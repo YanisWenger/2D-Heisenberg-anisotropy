@@ -4,17 +4,18 @@ include("./Heisenberg_Main_functions.jl")
 N=20000                         # Number of lattice sweeps
 burn = Int(min(N/4,100000))     # Burning period
 L=[8,12]                        # Lattice sizes
-T=Temperatures(.65,1.15,8)        # Temperatures
+T=Temperatures(.65,1.15,8)        # Temperatures .5,1.15,32
 d=Float32.([-1,1])              # anisotropic term
 PBC   = true                    # Periodic Boundary Conditions
 pi32  = Float32(π)
 Save  = true                    # to save Data in a folder named L_N (that needs to be created before, i.e.: [8, 12, 20]_1000000
+SaveLattices = false            # to save the (199 by default) last lattices of each chain
 
 println("  --  $N sweeps  --  ")
 starttime = time()
 for z in d
     for l in L
-        E1, M1 = MH_parallel_tempering(l, N, T, burn, pi32, L, z, Save)
+        E1, M1 = MH_parallel_tempering(l, N, T, burn, pi32, L, z, Save, SaveLattices)
     end
 end
 t = round(Int, time()-starttime)
@@ -23,6 +24,3 @@ if Save == true
 end
 
 println(t)
-
-
-# Cerror : error propag from Eerror or binning ?

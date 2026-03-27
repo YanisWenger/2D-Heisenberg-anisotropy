@@ -220,7 +220,7 @@ function MHStep(step::Int, rep::Replica, L::Int, d::Float32, PBC::Bool, pi32::Fl
     return rep
 end
 
-function MH_parallel_tempering(L::Int, N::Int, T::Vector{Float32}, burn::Int, pi32::Float32, AllLattices::Vector{Int}, d::Float32, Save::Bool=false, Skip::Int=10, swap::Int=101)     # Sampler
+function MH_parallel_tempering(L::Int, N::Int, T::Vector{Float32}, burn::Int, pi32::Float32, AllLattices::Vector{Int}, d::Float32, Save::Bool=false, SaveLattices::Bool=false, Skip::Int=10, swap::Int=101)     # Sampler
     nT = length(T)
     Lattices = Array{Array{Float64,3}, 2}(undef, nT, div(2000, Skip)-!(N%swap==0))       # To save the last lattices, 
     Replicas = Vector{Replica}(undef, nT)
@@ -248,7 +248,7 @@ function MH_parallel_tempering(L::Int, N::Int, T::Vector{Float32}, burn::Int, pi
                     Energies[n, m] = Energy(lat, L, PBC, d)
                     Mag[n, m] = mag(lat, L)
                     corr[n] += RowCorr(lat, L, PBC)
-                    if k > N-2000
+                    if SaveLattices && k > N-2000
                         kk = div(k+2000-N, Skip)
                         Lattices[n, kk] = lat
                     end
@@ -267,13 +267,11 @@ function MH_parallel_tempering(L::Int, N::Int, T::Vector{Float32}, burn::Int, pi
     if Save==true
         for n=1:nT
             accept = Replicas[n].Acceptance ./ Replicas[n].Try
-            @save "Data/$(AllLattices)_$N/$(L)_$(T[n])_$d.jld2" Energies=Energies[n,:] Mag=Mag[n,:] corr=corr[n] accept Lattices=Lattices[n,:]
+            SaveLattices ? (lattices=Lattices[n,:]) : ()
+            @save "Data/$(AllLattices)_$N/$(L)_$(T[n])_$d.jld2" Energies=Energies[n,:] Mag=Mag[n,:] corr=corr[n] accept lattices
         end
         @save "Data/$(AllLattices)_$N/swap_$(L)_$d.jld2" SwapAccept
     end
-    # for i in eachindex(Lattices)
-    #     if !isassigned(Lattices,i); print("$i not assigned\t");end
-    # end
     for n=1:nT; println("$L \t $d \t $(T[n]) \t $(Replicas[n].Acceptance ./ Replicas[n].Try) \t and Magz2 : $(mean(cos.(Replicas[n].Lattice[2,:,:]).^2))"); end
     return mean(Energies[1,:]), mean(Mag[1,:])
 end
