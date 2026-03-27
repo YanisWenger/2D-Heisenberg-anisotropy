@@ -5,10 +5,10 @@ include("./Heisenberg_analysis_functions.jl")
 # ----- Initial parameters ----- #
 
 
-Nperbin = 10       # Number of measurements per bins
+Nperbin = 100       # Number of measurements per bins
 PBC  = true         # Periodic Boundary Conditions
-N    = 20_000     # Number of lattice sweeps
-L    = [8, 12]  # Lattices size
+N    = 1000_000     # Number of lattice sweeps
+L    = [8, 12, 20, 32, 50]  # Lattices size
 
 
 # ----- Get data ----- #
@@ -25,7 +25,7 @@ M, MΔ       =   zeros(Float32, nL, nT, nd), zeros(Float32, nL, nT, nd)
 C, CΔ, CΔ2  =   zeros(Float32, nL, nT, nd), zeros(Float32, nL, nT, nd), zeros(Float32, nL, nT, nd)
 Acceptance  =   zeros(4, nL, nT, nd)
 Corr        =   Array{Vector{Float32}}(undef, nL, nT, nd)
-AllLattices =   Array{Vector{Array{Float32, 3}}}(undef, nL, nT, nd) # for Correlation time (do not exists by default)
+# AllLattices =   Array{Vector{Array{Float32, 3}}}(undef, nL, nT, nd) # for Correlation time (do not exists by default)
 SwapAccept  =   Array{Vector}(undef, nL, nd)    # acceptance of the lattices swap (parallel tempering)
 
 for l in eachindex(L)
@@ -40,7 +40,7 @@ for l in eachindex(L)
             C[l,t,z], CΔ[l,t,z], CΔ2[l,t,z] = (mean(En.^2)-E[l,t,z]^2)/T[t]^2*L[l]^2, Errorpropagation(Binor(En, Nbin, Nperbin), EΔ[l,t,z])/T[t]^2*L[l]^2,      std(Binor2nd(En, Nbin, Nperbin, T[t], L[l]))/T[t]/sqrt(Nbin)
             Corr[l,t,z]         = Data[:"corr"]
             Acceptance[:,l,t,z] = Data[:"accept"]
-            AllLattices[l,t,z] = Data[:"lattices"]
+            # AllLattices[l,t,z] = Data[:"lattices"]
             # println("N = ", L[l], "\tT = ", T[t], " \td = ", d[z], "\t E = ", round(E[l,t,z];digits=3), " ± ", round(EΔ[l,t,z];digits=5), "\tM = ", round(M[l,t,z];digits=3), " ± ", round(MΔ[l,t,z];digits=5), " \t χ = ", round(χ[l,t,z];digits=3), " ± ", round(χΔ[l,t,z];digits=3), "\tC = ", round(C[l,t,z];digits=3), " ± ", round(CΔ[l,t,z];digits=4), "\taccept = ", round.(Acceptance[:,l,t,z];digits=3))
         end
         SwapAccept[l,z] = load("Data/$(L)_$N$(folder_name_end)/swap_$(L[l])_$(d[z]).jld2")[:"SwapAccept"]
@@ -78,7 +78,7 @@ println(α, "\n", σα, "\n\n", γ, "\n", σγ)
 ξ, σξ = critlength(T, Corr[1,:,1], 1.0, true)           # third entry for the wanted temperature, fourth to plot or not, fifth component to "true" to get exponent of the algebraic decay instead of correlation length
 Plot_Max_ξ(d, T_for_d, Corr[1,:,:])
 
-# CorrTimePlot(AllLattices, T_for_d, d, 1, L, 2, false)   # Works only when lattices have been saved in the simulation process, doesn't by default.   Fourth element for which d, sixth for which L
+# CorrTimePlot(AllLattices, T_for_d, d, 3, L, 2, false)   # Works only when lattices have been saved in the simulation process, doesn't by default.   Fourth element for which d, sixth for which L
 
 histogram([x for cell in SwapAccept for x in cell])
 
@@ -93,7 +93,7 @@ Plot_Max_C_Χ(d, T_for_d, C, L, "C")
 
 Plot_Max_ξ(d, T_for_d, Corr[end,:,:], false) # bad for now as it always tries to fit an exponential, but below Tc, this is a power law
 
-a = CritLength(Corr[5,1,1], L[5])
+a = CritLength(Corr[5,20,13], L[5])
 
 
 

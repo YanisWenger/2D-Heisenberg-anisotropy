@@ -24,3 +24,5 @@ if Save == true
 end
 
 println(t)
+
+# without fastmath, with cluster update every 100 and 10, with swap every 10

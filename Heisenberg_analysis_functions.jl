@@ -186,8 +186,8 @@ function CritLength(corr::Vector, L::Int64)
     model(x, p) = CorrelationFunction(L, x, p)
     xdata = Int.(collect(1:L/2-1))
     fit = curve_fit(model, xdata, corr, [3.1, 3.1])    # [..,..] random guess
-    p=plot(xdata, corr)
-    plot!(xdata, CorrelationFunction(L, xdata, coef(fit)))
+    p=plot(xdata, corr, label="data")
+    plot!(xdata, CorrelationFunction(L, xdata, coef(fit)), label="fit")
     display(p)
     return coef(fit), stderror(fit)
 end
