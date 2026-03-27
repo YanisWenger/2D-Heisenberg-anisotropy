@@ -222,15 +222,15 @@ end
 
 function MH_parallel_tempering(L::Int, N::Int, T::Vector{Float32}, burn::Int, pi32::Float32, AllLattices::Vector{Int}, d::Float32, Save::Bool=false, Skip::Int=10, swap::Int=101)     # Sampler
     nT = length(T)
-    # Lattices = Array{Array{Float64,3}}(undef, nT, round(Int,2000/Skip))#-1)       # To save the last lattices
+    Lattices = Array{Array{Float64,3}, 2}(undef, nT, div(2000, Skip)-!(N%swap==0))       # To save the last lattices, 
     Replicas = Vector{Replica}(undef, nT)
     βdiff = 1 ./T[1:nT-1] - 1 ./ T[2:nT]    # inverse temperature difference, useful to swap lattices
     for i=1:nT                              # Initialize Replicas
         lat = Initial_lattice(L, pi32)
         Replicas[i] = Replica(lat, T[i], Energy(lat, L, PBC, d), .25f0, .4f0, .25f0, [0,0,0,0], [0,0,0,0])
     end
-    Nswap = round(Int, N/swap)                      # number of lattice swap's try 
-    Nmeasurement = round(Int, (N - burn)/Skip)      # Number of measurement (as some sweeps are not measured to save some time)
+    Nswap = div(N, swap)                            # number of lattice swap's try 
+    Nmeasurement = div(N - burn, Skip)      # Number of measurement (as some sweeps are not measured to save some time)
     Energies = zeros(Float32, nT, Nmeasurement)
     Mag  = zeros(Float32, nT, Nmeasurement)
     corr = [zeros(Float32, length(RowCorr(Initial_lattice(L, pi32), L, PBC))) for _ in 1:nT]
@@ -242,16 +242,16 @@ function MH_parallel_tempering(L::Int, N::Int, T::Vector{Float32}, burn::Int, pi
             for j=1:swap
                 k = (i-1)*swap+j
                 Replicas[n] = MHStep(k, Replicas[n], L, d, PBC, pi32, rng)
-                if mod(k, Skip) == 0 && k > burn            # to not measure every lattice sweeps
+                if k > burn && mod(k, Skip) == 0            # to not measure every lattice sweeps
                     lat = Replicas[n].Lattice
-                    m = round(Int,(k-burn)/Skip)
+                    m = div(k-burn, Skip)
                     Energies[n, m] = Energy(lat, L, PBC, d)
                     Mag[n, m] = mag(lat, L)
                     corr[n] += RowCorr(lat, L, PBC)
-                    # if k > N-2000
-                    #     kk = round(Int,(k+2000-N)/Skip)
-                    #     Lattices[n, kk] = lat
-                    # end
+                    if k > N-2000
+                        kk = div(k+2000-N, Skip)
+                        Lattices[n, kk] = lat
+                    end
                 end
             end
             Replicas[n].E = Energy(Replicas[n].Lattice, L, PBC, d)  #   Only need to calculate the energy for storing (above) and for potentially swapping lattices
@@ -267,15 +267,15 @@ function MH_parallel_tempering(L::Int, N::Int, T::Vector{Float32}, burn::Int, pi
     if Save==true
         for n=1:nT
             accept = Replicas[n].Acceptance ./ Replicas[n].Try
-            @save "Data/$(AllLattices)_$N/$(L)_$(T[n])_$d.jld2" Energies=Energies[n,:] Mag=Mag[n,:] corr=corr[n] accept# Lattices=Lattices[n,:]# Energies2
+            @save "Data/$(AllLattices)_$N/$(L)_$(T[n])_$d.jld2" Energies=Energies[n,:] Mag=Mag[n,:] corr=corr[n] accept Lattices=Lattices[n,:]
         end
         @save "Data/$(AllLattices)_$N/swap_$(L)_$d.jld2" SwapAccept
     end
     # for i in eachindex(Lattices)
-    #     if !isassigned(Lattices,i); println(i);end
+    #     if !isassigned(Lattices,i); print("$i not assigned\t");end
     # end
     for n=1:nT; println("$L \t $d \t $(T[n]) \t $(Replicas[n].Acceptance ./ Replicas[n].Try) \t and Magz2 : $(mean(cos.(Replicas[n].Lattice[2,:,:]).^2))"); end
-    return mean(Energies[1,:]), #=mean(Energies2[1,:]),=# mean(Mag[1,:])
+    return mean(Energies[1,:]), mean(Mag[1,:])
 end
 
 function RowCorr(Lattice::Array{Float32, 3}, L::Int, PBC::Bool)   # Return the average row Correlation of the matrix (in a Correlation vector : first neigbour, second neigbour...)
@@ -334,7 +334,7 @@ function Mag_z2(Lattice::Array{Float32,3}, L::Int64)
     return magz2/L^2
 end
 
-@inline function Temperatures(Tmin::Float64, Tmax::Float64, N::Int)
+@inline function Temperatures(Tmin::Real, Tmax::Real, N::Int64)
     return Float32.(round.(Tmin .* (Tmax/Tmin) .^ ((0:N-1)/(N-1)); digits=3))
 end
 
@@ -351,3 +351,5 @@ end # just a choice, there is no perfect one
 #   @inline     directly put the code of the function where the function is called, instead of really calling it    for single line function, no need "return" inside it
 #   @fastmath   allows to reorder operation to save a bit of time (sometimes less precise because of floating point handling)
 #   @inbounds   don't check if wanted component exist example     x=vector[n]     Doesn't check that the n-th component even exists, just trust the process
+# Lattices=Array{Int64, 2}(undef, 1, 2)
+# !isassigned(Lattices,i)
