@@ -18,6 +18,7 @@ for z in d
         E1, M1 = MH_parallel_tempering(l, N, T, burn, pi32, L, z, Save, SaveLattices)
     end
 end
+
 t = round(Int, time()-starttime)
 if Save == true
     open("Data/$(L)_$N/elapsed_time.txt", "a") do file; write(file, "$t\n$d\n$T\n\n"); end

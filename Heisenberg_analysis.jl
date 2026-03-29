@@ -40,7 +40,7 @@ for l in eachindex(L)
             C[l,t,z], CΔ[l,t,z], CΔ2[l,t,z] = (mean(En.^2)-E[l,t,z]^2)/T[t]^2*L[l]^2, Errorpropagation(Binor(En, Nbin, Nperbin), EΔ[l,t,z])/T[t]^2*L[l]^2,      std(Binor2nd(En, Nbin, Nperbin, T[t], L[l]))/T[t]/sqrt(Nbin)
             Corr[l,t,z]         = Data[:"corr"]
             Acceptance[:,l,t,z] = Data[:"accept"]
-            # AllLattices[l,t,z] = Data[:"lattices"]
+            # AllLattices[l,t,z] = Data[:"Lattices"]
             # println("N = ", L[l], "\tT = ", T[t], " \td = ", d[z], "\t E = ", round(E[l,t,z];digits=3), " ± ", round(EΔ[l,t,z];digits=5), "\tM = ", round(M[l,t,z];digits=3), " ± ", round(MΔ[l,t,z];digits=5), " \t χ = ", round(χ[l,t,z];digits=3), " ± ", round(χΔ[l,t,z];digits=3), "\tC = ", round(C[l,t,z];digits=3), " ± ", round(CΔ[l,t,z];digits=4), "\taccept = ", round.(Acceptance[:,l,t,z];digits=3))
         end
         SwapAccept[l,z] = load("Data/$(L)_$N$(folder_name_end)/swap_$(L[l])_$(d[z]).jld2")[:"SwapAccept"]

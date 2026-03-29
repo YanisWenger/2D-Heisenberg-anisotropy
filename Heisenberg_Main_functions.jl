@@ -267,8 +267,11 @@ function MH_parallel_tempering(L::Int, N::Int, T::Vector{Float32}, burn::Int, pi
     if Save==true
         for n=1:nT
             accept = Replicas[n].Acceptance ./ Replicas[n].Try
-            SaveLattices ? (lattices=Lattices[n,:]) : (lattices=())
-            @save "Data/$(AllLattices)_$N/$(L)_$(T[n])_$d.jld2" Energies=Energies[n,:] Mag=Mag[n,:] corr=corr[n] accept lattices
+            if SaveLattices
+                @save "Data/$(AllLattices)_$N/$(L)_$(T[n])_$d.jld2" Energies=Energies[n,:] Mag=Mag[n,:] corr=corr[n] accept Lattices=Lattices[n,:]
+            else
+                @save "Data/$(AllLattices)_$N/$(L)_$(T[n])_$d.jld2" Energies=Energies[n,:] Mag=Mag[n,:] corr=corr[n] accept
+            end
         end
         @save "Data/$(AllLattices)_$N/swap_$(L)_$d.jld2" SwapAccept
     end
