@@ -222,7 +222,7 @@ end
 
 function MH_parallel_tempering(L::Int, N::Int, T::Vector{Float32}, burn::Int, pi32::Float32, AllLattices::Vector{Int}, d::Float32, Save::Bool=false, SaveLattices::Bool=false, Skip::Int=10, swap::Int=101)     # Sampler
     nT = length(T)
-    Lattices = Array{Array{Float64,3}, 2}(undef, nT, div(2000, Skip)-!(N%swap==0))       # To save the last lattices, 
+    Lattices = Array{Array{Float64,3}, 2}(undef, nT, div(2000, Skip)-!(N%swap==0)*Skip)       # To save the last lattices, 
     Replicas = Vector{Replica}(undef, nT)
     βdiff = 1 ./T[1:nT-1] - 1 ./ T[2:nT]    # inverse temperature difference, useful to swap lattices
     for i=1:nT                              # Initialize Replicas
