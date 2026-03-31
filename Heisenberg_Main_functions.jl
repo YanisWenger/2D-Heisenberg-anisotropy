@@ -16,7 +16,7 @@ function Energy(Lattice::Array{Float32, 3}, L::Int, PBC::Bool, d::Float32)    # 
         i2 = i==L ? 1 : i+1
         for j=1:n
             j2 = j==L ? 1 : j+1
-            E += -Correlation(Lattice[1, i,  j], Lattice[2, i, j], Lattice[1, i, j2], Lattice[2, i, j2]) - Correlation(Lattice[1, i,  j], Lattice[2, i,  j], Lattice[1, i2,  j], Lattice[2, i2, j]) + d * cos(Lattice[2, i, j])^2
+            E += -Correlation(Lattice[1, i, j], Lattice[2, i, j], Lattice[1, i, j2], Lattice[2, i, j2]) - Correlation(Lattice[1, i,  j], Lattice[2, i,  j], Lattice[1, i2,  j], Lattice[2, i2, j]) + d * cos(Lattice[2, i, j])^2
         end
     end
     return E
@@ -185,10 +185,9 @@ end
 
 function Swap(Replicas::Vector{Replica}, i::Int, rng_swap::AbstractRNG, βdiff_i::Float32)    # For parallel tempering: try to swap with the next temperature
     j=i+1
-    if βdiff_i*(Replicas[i].E - Replicas[j].E) > rand(rng_swap)
+    if exp(βdiff_i*(Replicas[j].E - Replicas[i].E)) > rand(rng_swap)
         Replicas[i].Lattice, Replicas[j].Lattice = Replicas[j].Lattice, Replicas[i].Lattice
         Replicas[i].E,       Replicas[j].E       = Replicas[j].E,       Replicas[i].E
-        Replicas[i].σ,       Replicas[j].σ       = Replicas[j].σ,       Replicas[i].σ
         return true
     else
         return false
@@ -220,16 +219,17 @@ function MHStep(step::Int, rep::Replica, L::Int, d::Float32, PBC::Bool, pi32::Fl
     return rep
 end
 
-function MH_parallel_tempering(L::Int, N::Int, T::Vector{Float32}, burn::Int, pi32::Float32, AllLattices::Vector{Int}, d::Float32, Save::Bool=false, SaveLattices::Bool=false, Skip::Int=10, swap::Int=101)     # Sampler
+function MH_parallel_tempering(L::Int, N::Int, T::Vector{Float32}, burn::Int, pi32::Float32, AllLattices::Vector{Int}, d::Float32, Save::Bool=false, SaveLattices::Bool=false, Skip::Int=10, swap::Int=100)     # Sampler
     nT = length(T)
     Lattices = Array{Array{Float64,3}, 2}(undef, nT, div(2000, Skip)-!(N%swap==0)*Skip)       # To save the last lattices, 
     Replicas = Vector{Replica}(undef, nT)
-    βdiff = 1 ./T[1:nT-1] - 1 ./ T[2:nT]    # inverse temperature difference, useful to swap lattices
+    βdiff = diff(1 ./T)    # inverse temperature difference, useful to swap lattices
     for i=1:nT                              # Initialize Replicas
         lat = Initial_lattice(L, pi32)
         Replicas[i] = Replica(lat, T[i], Energy(lat, L, PBC, d), .25f0, .4f0, .25f0, [0,0,0,0], [0,0,0,0])
     end
     Nswap = div(N, swap)                            # number of lattice swap's try 
+    println("$N, $Nswap, $swap, $(Nswap*swap)")
     Nmeasurement = div(N - burn, Skip)      # Number of measurement (as some sweeps are not measured to save some time)
     Energies = zeros(Float32, nT, Nmeasurement)
     Mag  = zeros(Float32, nT, Nmeasurement)

@@ -4,8 +4,8 @@ include("./Heisenberg_Main_functions.jl")
 N=20000                         # Number of lattice sweeps
 burn = Int(min(N/4,100000))     # Burning period
 L=[8,12]                        # Lattice sizes
-T=Temperatures(.65,1.15,8)        # Temperatures .5,1.15,32
-d=Float32.([-1,1])              # anisotropic term
+T=Temperatures(2,2.5,8)        # Temperatures .5,1.15,32
+d=Float32.([-100])              # anisotropic term
 PBC   = true                    # Periodic Boundary Conditions
 pi32  = Float32(π)
 Save  = true                    # to save Data in a folder named L_N (that needs to be created before, i.e.: [8, 12, 20]_1000000
@@ -26,4 +26,4 @@ end
 
 println(t)
 
-# without fastmath, with cluster update every 100 and 10, with swap every 10
+# without fastmath, with cluster update every 50, with swap every 10, with 2x16 instead of 32T
