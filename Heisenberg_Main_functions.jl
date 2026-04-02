@@ -16,14 +16,16 @@ function Energy(Lattice::Array{Float32, 3}, L::Int, PBC::Bool, d::Float32)    # 
         i2 = i==L ? 1 : i+1
         for j=1:n
             j2 = j==L ? 1 : j+1
-            E += -Correlation(Lattice[1, i, j], Lattice[2, i, j], Lattice[1, i, j2], Lattice[2, i, j2]) - Correlation(Lattice[1, i,  j], Lattice[2, i,  j], Lattice[1, i2,  j], Lattice[2, i2, j]) + d * cos(Lattice[2, i, j])^2
+            E += -Correlation(Lattice[:, i, j], Lattice[:, i, j2]) - Correlation(Lattice[:, i, j], Lattice[:, i2, j]) + d * cos(Lattice[2, i, j])^2
         end
     end
     return E
 end #   @inbounds almost divide the execution time by 2
 
-@inline @fastmath function Correlation(ϕ1::Float32, θ1::Float32, ϕ2::Float32, θ2::Float32)
-    sin(θ1)*sin(θ2)*cos(ϕ1-ϕ2) + cos(θ1)*cos(θ2)
+@inline @fastmath @inbounds function Correlation(spin1::Vector{Float32}, spin2::Vector{Float32})
+    sθ1, cθ1 = sincos(spin1[2])
+    sθ2, cθ2 = sincos(spin2[2])
+    return sθ1*sθ2*cos(spin1[1]-spin2[1]) + cθ1*cθ2
 end
 
 function Initial_lattice(L::Int, pi32::Float32)
@@ -56,16 +58,16 @@ function SingleFlip(Lattice::Array{Float32, 3}, i::Int, j::Int, T::Float32, L::I
     if PBC==false
         Δ = 0f0
         if i!=1
-            Δ += Correlation(newspin[1], newspin[2], Lattice[1,i-1,j], Lattice[2,i-1,j]) - Correlation(Lattice[1,i,j],Lattice[2,i,j],Lattice[1,i-1,j],Lattice[2,i-1,j]) # This is the right sign as the bounding energy is negative (and is calculate positively)
+            Δ += Correlation(newspin, Lattice[:,i-1,j]) - Correlation(Lattice[:,i,j],Lattice[:,i-1,j]) # This is the right sign as the bounding energy is negative (and is calculate positively)
         end
         if i != L
-            Δ += Correlation(newspin[1], newspin[2],Lattice[1,i+1,j],Lattice[2,i+1,j]) - Correlation(Lattice[1,i,j],Lattice[2,i,j],Lattice[1,i+1,j],Lattice[2,i+1,j])
+            Δ += Correlation(newspin, Lattice[:,i+1,j]) - Correlation(Lattice[:,i,j],Lattice[:,i+1,j])
         end
         if j != 1
-            Δ += Correlation(newspin[1], newspin[2],Lattice[1,i,j-1],Lattice[2,i,j-1]) - Correlation(Lattice[1,i,j],Lattice[2,i,j],Lattice[1,i,j-1],Lattice[2,i,j-1])
+            Δ += Correlation(newspin, Lattice[:,i,j-1]) - Correlation(Lattice[:,i,j],Lattice[:,i,j-1])
         end
         if j != L
-            Δ += Correlation(newspin[1], newspin[2],Lattice[1,i,j+1],Lattice[2,i,j+1]) - Correlation(Lattice[1,i,j],Lattice[2,i,j],Lattice[1,i,j+1],Lattice[2,i,j+1])
+            Δ += Correlation(newspin, Lattice[:,i,j+1]) - Correlation(Lattice[:,i,j],Lattice[:,i,j+1])
         end
         Δ += d * (cos(Lattice[2,i,j])^2 - cos(newspin[2])^2)
     else
@@ -149,38 +151,37 @@ function LatticeSweep(Lattice::Array{Float32, 3}, L::Int, T::Float32, σ::Float3
     return Lattice, Accept, Tr
 end
 
-function MultipleIsingFlips(Lattice::Array{Float32, 3}, L::Int, T::Float32, pi32::Float32, d::Float32, PBC::Bool, rng::AbstractRNG)      # Wolff update
-    p = 1 - ℯ^(-2/T)    # what should we do about d ?
-    k, l = rand(TaskLocalRNG(), 1:L, 2)
+function MultipleIsingFlips(Lattice::Array{Float32, 3}, L::Int, T::Float32, pi32::Float32, rng::AbstractRNG)      # Wolff update
+    Axis = [2*pi32*rand(rng, Float32), acos.(1 .- 2*rand(rng, Float32))]    # random axis to 
+    k, l = rand(rng, 1:L, 2)
     InCluster = falses(L,L)
     InCluster[k,l] = true
     CheckNeighbor = [[k,l]]
     while CheckNeighbor != []
         i,j = pop!(CheckNeighbor)
-        NewCheckNeighbor, InCluster = AddNeighbors(i,j, L, InCluster, p, Lattice[2,:,:],pi32, rng) # check first i-1,j; then i,j-1; i+1,j and finally i,j+1
-        CheckNeighbor = unique(vcat(CheckNeighbor,NewCheckNeighbor))
+        NewNeighborToCheck, InCluster = AddNeighbors(i, j, T, L, Axis, InCluster, Lattice, pi32, rng) # check first i-1,j; then i,j-1; i+1,j and finally i,j+1
+        CheckNeighbor = unique(vcat(CheckNeighbor,NewNeighborToCheck))
     end
     @inbounds for i in 1:L, j in 1:L
         if InCluster[i,j]
-            Lattice[2,i,j] = pi32 - Lattice[2,i,j]
+            Lattice[2,i,j] = pi32 - Lattice[2,i,j]  # need to be changed to flip along Axis
         end
     end
-    E = Energy(Lattice, L, PBC, d)
-    return Lattice, E
+    return Lattice
 end
 
-function AddNeighbors(i::Int,j::Int, L::Int, InCluster::BitMatrix, p::Float32, ZLattice::Array{Float32, 2}, pi32::Float32, rng::AbstractRNG)    # For Wolff update: add or not to the cluster the neighbors of a site already in the cluster
-    NewCheckNeighbor = []
-    Zsign = sign(ZLattice[i,j]-pi32/2)
-    neighbor = [[mod(i-2,L)+1,j],[i,mod(j-2,L)+1],[mod(i,L)+1,j],[i,mod(j,L)+1]]    # The four neighbors
-    for n=1:4                                       # To check the four neighbors
+function AddNeighbors(i::Int64,j::Int64, T::Float32, L::Int, Axis::Vector{Float32}, InCluster::BitMatrix, Lattice::Array{Float32, 3}, pi32::Float32, rng::AbstractRNG)    # For Wolff update: add or not to the cluster the neighbors of a site already in the cluster
+    NewNeighborToCheck = []
+    neighbor = [[mod(i-2,L)+1,j],[i,mod(j-2,L)+1],[mod(i,L)+1,j],[i,mod(j,L)+1]]    # The four neighbors (could be optimized using a?b:c instead of mod)
+    dot0 = Correlation(Axis, Lattice[:,i,j])
+    for n=1:4               # To check the four neighbors
         k,l = neighbor[n]
-        if InCluster[k,l] == false && sign(ZLattice[k,l]-pi32/2) == Zsign && rand(rng) < p
+        if InCluster[k,l] == false && rand(rng) < 1-exp(-2*dot0*Correlation(Axis, Lattice[:,k,l])/T)
             InCluster[k,l] = true
-            push!(NewCheckNeighbor, [k,l])
+            push!(NewNeighborToCheck, [k,l])
         end
     end
-    return NewCheckNeighbor, InCluster
+    return NewNeighborToCheck, InCluster
 end
 
 function Swap(Replicas::Vector{Replica}, i::Int, rng_swap::AbstractRNG, βdiff_i::Float32)    # For parallel tempering: try to swap with the next temperature
@@ -197,20 +198,20 @@ end
 function MHStep(step::Int, rep::Replica, L::Int, d::Float32, PBC::Bool, pi32::Float32, rng::AbstractRNG)   # ful MH step: i.e. lattice sweep or Wolff algorithm, and (potentially) adjust the three σ for the three gaussian proposal to be closer to a 50% acceptance rate
     Mz2 = Mag_z2(rep.Lattice, L)
     if mod(step,1000)==0 && Mz2 > .7f0
-        rep.Lattice, rep.E = MultipleIsingFlips(rep.Lattice, L, rep.T, pi32, d, PBC, rng)    # Wolff algorithm
+        rep.Lattice = MultipleIsingFlips(rep.Lattice, L, rep.T, pi32, rng)    # Wolff algorithm
     else
         rep.Lattice, Accept, Tr = LatticeSweep(rep.Lattice, L, rep.T, rep.σ, rep.σϕ, rep.σθ, pi32, PBC, d, IsingProba(Mz2), XYProba(Mz2), rng)
         @fastmath begin
             if Tr[1] > 10
-                rep.σ = min(max(rep.σ*2*Accept[1]/Tr[1], 1/sqrt(step+1000)), 10)     # if the acceptance is higher than .5, sigma should increase (decreased) to explore more (less) the phasespace to get closer to .5
+                rep.σ = min(max(rep.σ*2*Accept[1]/Tr[1], 1/sqrt(step+1000)), 10)     # if the acceptance is higher (lower) than .5, sigma should increase (decreased) to explore more (less) the phase space to get closer to .5
             end
             if Tr[3] > 0
                 a = 1/(Tr[3]+2)
-                rep.σϕ = min(max(rep.σϕ*2*min(max(Accept[3]/Tr[3], a), 1-a), 1/sqrt(step + 1000)), 10)     # if the acceptance is higher than .5, sigma should increase (decreased) to explore more (less) the phasespace to get closer to .5
+                rep.σϕ = min(max(rep.σϕ*2*min(max(Accept[3]/Tr[3], a), 1-a), 1/sqrt(step + 1000)), 10)     # if the acceptance is higher (lower) than .5, sigma should increase (decreased) to explore more (less) the phase space to get closer to .5
             end         # I could have used clamp(a,b,c) instead of min(max(a,c),b) but it is less efficient (around 50% slower)
             if Tr[4] > 0
                 a = 1/(Tr[4]+2)
-                rep.σθ = min(max(rep.σθ*2*min(max(Accept[4]/Tr[4], a), 1-a), 1/sqrt(step+10000)), 2)     # if the acceptance is higher than .5, sigma should increase (decreased) to explore more (less) the phasespace to get closer to .5
+                rep.σθ = min(max(rep.σθ*2*min(max(Accept[4]/Tr[4], a), 1-a), 1/sqrt(step+10000)), 2)     # if the acceptance is higher (lower) than .5, sigma should increase (decreased) to explore more (less) the phase space to get closer to .5
             end
             rep.Acceptance += Accept
             rep.Try += Tr
@@ -287,7 +288,7 @@ function RowCorr(Lattice::Array{Float32, 3}, L::Int, PBC::Bool)   # Return the a
             a=0f0
             for j=1:L
                 for k=1:(L-i)
-                    a+=Correlation(Lattice[1,j,k], Lattice[2,j,k], Lattice[1,j,k+i], Lattice[2,j,k+i])
+                    a+=Correlation(Lattice[:,j,k], Lattice[:,j,k+i])
                 end
             end
             corr[i] = a/((L-i)*L)
@@ -300,7 +301,7 @@ function RowCorr(Lattice::Array{Float32, 3}, L::Int, PBC::Bool)   # Return the a
             for j=1:L
                 for k=1:L
                     k2 = (k + i <= L) ? k + i : k + i - L # like modulo, but more efficient (only if x < 2y for mod(x,y))
-                    a+=Correlation(Lattice[1,j,k], Lattice[2,j,k], Lattice[1,j,k2], Lattice[2,j,k2]) #cos(Lattice[1,j,k]-Lattice[1,j,mod(k+i-1,L)+1]) * cos(Lattice[2,j,k]-Lattice[2,j,mod(k+i-1,L)+1])
+                    a+=Correlation(Lattice[:,j,k], Lattice[:,j,k2]) #cos(Lattice[1,j,k]-Lattice[1,j,mod(k+i-1,L)+1]) * cos(Lattice[2,j,k]-Lattice[2,j,mod(k+i-1,L)+1])
                 end
             end
             corr[i] = a/L^2
@@ -329,8 +330,7 @@ end
 function Mag_z2(Lattice::Array{Float32,3}, L::Int64)
     magz2 = 0f0
     @inbounds @fastmath for j=1:L, k=1:L
-        c = cos(Lattice[2,j,k])^2
-        magz2 += c*c
+        magz2 += cos(Lattice[2,j,k])^2
     end
     return magz2/L^2
 end
