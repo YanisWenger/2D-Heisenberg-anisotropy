@@ -35,25 +35,25 @@ function Initial_lattice(L::Int, pi32::Float32)
     return lattice
 end
 
-@inline @fastmath function EnergyDiff(spin0old::Vector{Float32}, spin0new::Vector{Float32}, spin1::Vector{Float32}, spin2::Vector{Float32}, spin3::Vector{Float32}, spin4::Vector{Float32}, d::Float32) # calculate the bounding energy difference between a spin and its neigbors and another one with the same neighbors
+@inline @fastmath @inbounds function EnergyDiff(spin0old::Vector{Float32}, spin0new::Vector{Float32}, spin1::Vector{Float32}, spin2::Vector{Float32}, spin3::Vector{Float32}, spin4::Vector{Float32}, d::Float32) # calculate the bounding energy difference between a spin and its neigbors and another one with the same neighbors
     sold, snew = sin(spin0old[2]), sin(spin0new[2])
     cold, cnew = cos(spin0old[2]), cos(spin0new[2])
     return (snew*cos(spin0new[1]-spin1[1]) - sold*cos(spin0old[1]-spin1[1]))*sin(spin1[2]) + (cnew-cold)*cos(spin1[2])  +  (snew*cos(spin0new[1]-spin2[1]) - sold*cos(spin0old[1]-spin2[1]))*sin(spin2[2]) + (cnew-cold)*cos(spin2[2])  +  (snew*cos(spin0new[1]-spin3[1]) - sold*cos(spin0old[1]-spin3[1]))*sin(spin3[2]) + (cnew-cold)*cos(spin3[2])  +  (snew*cos(spin0new[1]-spin4[1]) - sold*cos(spin0old[1]-spin4[1]))*sin(spin4[2]) + (cnew-cold)*cos(spin4[2])   +   d*(cold^2-cnew^2) # old - new for the last term, as H = - Σ Si Sj + d Σ Sz^2 (sign difference between these two terms)
 end
 
-@inline @fastmath function EnergyDiffTheta(spin0old::Vector{Float32}, theta::Float32, spin1::Vector{Float32}, spin2::Vector{Float32}, spin3::Vector{Float32}, spin4::Vector{Float32}, d::Float32) # Like EnergyDiff but optimized for a change in theta only (for XY-theta sweep or Ising flip)
+@inline @fastmath @inbounds function EnergyDiffTheta(spin0old::Vector{Float32}, theta::Float32, spin1::Vector{Float32}, spin2::Vector{Float32}, spin3::Vector{Float32}, spin4::Vector{Float32}, d::Float32) # Like EnergyDiff but optimized for a change in theta only (for XY-theta sweep or Ising flip)
     sold, snew = sin(spin0old[2]), sin(theta)
     cold, cnew = cos(spin0old[2]), cos(theta)
     phi = spin0old[1]
     return (snew-sold)*(cos(phi-spin1[1])*sin(spin1[2]) + cos(phi-spin2[1])*sin(spin2[2]) + cos(phi-spin3[1])*sin(spin3[2]) + cos(phi-spin4[1])*sin(spin4[2])) + (cnew-cold)*(cos(spin1[2])+cos(spin2[2])+cos(spin3[2])+cos(spin4[2]))   +   d*(cold^2-cnew^2)
 end
 
-@inline @fastmath function EnergyDiffPhi(spin0old::Vector{Float32}, phi::Float32, spin1::Vector{Float32}, spin2::Vector{Float32}, spin3::Vector{Float32}, spin4::Vector{Float32}) #  Like EnergyDiff but optimized for a change in phi only (for XY-phi sweep)
+@inline @fastmath @inbounds function EnergyDiffPhi(spin0old::Vector{Float32}, phi::Float32, spin1::Vector{Float32}, spin2::Vector{Float32}, spin3::Vector{Float32}, spin4::Vector{Float32}) #  Like EnergyDiff but optimized for a change in phi only (for XY-phi sweep)
     phiold = spin0old[1]
     return sin(spin0old[2])*((cos(phi-spin1[1])-cos(phiold-spin1[1]))*sin(spin1[2])  +  (cos(phi-spin2[1])-cos(phiold-spin2[1]))*sin(spin2[2])  +  (cos(phi-spin3[1])-cos(phiold-spin3[1]))*sin(spin3[2])  +  (cos(phi-spin4[1])-cos(phiold-spin4[1]))*sin(spin4[2]))
 end
 
-function SingleFlip(Lattice::Array{Float32, 3}, i::Int, j::Int, T::Float32, L::Int, σ::Float32, σϕ::Float32, σθ::Float32, pi32::Float32, PBC::Bool, d::Float32, pIsing::Float32, pXY::Float32, rng::AbstractRNG)      # Try a new configuration (proposal) and either accept or reject it
+@inbounds function SingleFlip(Lattice::Array{Float32, 3}, i::Int, j::Int, T::Float32, L::Int, σ::Float32, σϕ::Float32, σθ::Float32, pi32::Float32, PBC::Bool, d::Float32, pIsing::Float32, pXY::Float32, rng::AbstractRNG)      # Try a new configuration (proposal) and either accept or reject it
     newspin, Whichflip = NewSpin(Lattice[:,i,j], σ, σϕ, σθ, pi32, pIsing, pXY, rng)
     if PBC==false
         Δ = 0f0
@@ -72,11 +72,11 @@ function SingleFlip(Lattice::Array{Float32, 3}, i::Int, j::Int, T::Float32, L::I
         Δ += d * (cos(Lattice[2,i,j])^2 - cos(newspin[2])^2)
     else
         if Whichflip==1
-            Δ = EnergyDiff(Lattice[:,i,j], newspin, Lattice[:,mod(i-2,L)+1,j],Lattice[:,i,mod(j-2,L)+1],Lattice[:,mod(i,L)+1,j],Lattice[:,i,mod(j,L)+1],d)      # previously: Δ = Correlation(newspin,Lattice[:,mod(i-2,L)+1,j]) - Correlation(Lattice[:,i,j],Lattice[:,mod(i-2,L)+1,j])   +   Correlation(newspin,Lattice[:,mod(i,L)+1,j]) - Correlation(Lattice[:,i,j],Lattice[:,mod(i,L)+1,j])   +   Correlation(newspin,Lattice[:,i,mod(j-2,L)+1]) - Correlation(Lattice[:,i,j],Lattice[:,i,mod(j-2,L)+1])   +   Correlation(newspin,Lattice[:,i,mod(j,L)+1]) - Correlation(Lattice[:,i,j],Lattice[:,i,mod(j,L)+1])
+            Δ = EnergyDiff(Lattice[:,i,j], newspin, Lattice[:,i==1 ? L : i-1,j], Lattice[:,i,j==1 ? L : j-1], Lattice[:,i==L ? 1 : i+1,j], Lattice[:,i,j==L ? 1 : j+1],d)      # previously: Δ = Correlation(newspin,Lattice[:,mod(i-2,L)+1,j]) - Correlation(Lattice[:,i,j],Lattice[:,mod(i-2,L)+1,j])   +   Correlation(newspin,Lattice[:,mod(i,L)+1,j]) - Correlation(Lattice[:,i,j],Lattice[:,mod(i,L)+1,j])   +   Correlation(newspin,Lattice[:,i,mod(j-2,L)+1]) - Correlation(Lattice[:,i,j],Lattice[:,i,mod(j-2,L)+1])   +   Correlation(newspin,Lattice[:,i,mod(j,L)+1]) - Correlation(Lattice[:,i,j],Lattice[:,i,mod(j,L)+1])
         elseif Whichflip==3
-            Δ = EnergyDiffPhi(Lattice[:,i,j], newspin[1], Lattice[:,mod(i-2,L)+1,j],Lattice[:,i,mod(j-2,L)+1],Lattice[:,mod(i,L)+1,j],Lattice[:,i,mod(j,L)+1])
+            Δ = EnergyDiffPhi(Lattice[:,i,j], newspin[1], Lattice[:,i==1 ? L : i-1,j], Lattice[:,i,j==1 ? L : j-1], Lattice[:,i==L ? 1 : i+1,j], Lattice[:,i,j==L ? 1 : j+1])
         else # if Ising or XY-theta flip, as on both cases phi stay the same
-            Δ = EnergyDiffTheta(Lattice[:,i,j], newspin[2], Lattice[:,mod(i-2,L)+1,j],Lattice[:,i,mod(j-2,L)+1],Lattice[:,mod(i,L)+1,j],Lattice[:,i,mod(j,L)+1],d)
+            Δ = EnergyDiffTheta(Lattice[:,i,j], newspin[2], Lattice[:,i==1 ? L : i-1,j], Lattice[:,i,j==1 ? L : j-1], Lattice[:,i==L ? 1 : i+1,j], Lattice[:,i,j==L ? 1 : j+1],d)
         end
     end
     expdiff = exp(Δ/T)
@@ -90,7 +90,7 @@ function SingleFlip(Lattice::Array{Float32, 3}, i::Int, j::Int, T::Float32, L::I
     return Lattice[:,i,j], acceptance, Whichflip
 end
 
-function NewSpin(spin::Vector{Float32}, σ::Float32, σϕ::Float32, σθ::Float32, pi32::Float32, pIsing::Union{Float32, Int}, pXY::Union{Float32, Int}, rng::AbstractRNG) # Choose which kind of proposal (isotropic one, Ising flip, only change phi, only change theta)
+@inbounds function NewSpin(spin::Vector{Float32}, σ::Float32, σϕ::Float32, σθ::Float32, pi32::Float32, pIsing::Union{Float32, Int}, pXY::Union{Float32, Int}, rng::AbstractRNG) # Choose which kind of proposal (isotropic one, Ising flip, only change phi, only change theta)
     if pIsing == 0 && pXY == 0
         Whichflip = 1
         spin = NewPhiTheta(spin, σ, pi32, rng)
@@ -151,8 +151,10 @@ function LatticeSweep(Lattice::Array{Float32, 3}, L::Int, T::Float32, σ::Float3
     return Lattice, Accept, Tr
 end
 
-function MultipleIsingFlips(Lattice::Array{Float32, 3}, L::Int, T::Float32, pi32::Float32, rng::AbstractRNG)      # Wolff update
-    Axis = [2*pi32*rand(rng, Float32), acos.(1 .- 2*rand(rng, Float32))]    # random axis to 
+function ClusterUpdate(Lattice::Array{Float32, 3}, L::Int, T::Float32, pi32::Float32, rng::AbstractRNG)      # Wolff update
+    ϕ = 2*pi32*rand(rng, Float32)
+    θ = acos.(1 .- 2*rand(rng, Float32))
+    Axis = [ϕ, θ]    # random direction to flip the cluster
     k, l = rand(rng, 1:L, 2)
     InCluster = falses(L,L)
     InCluster[k,l] = true
@@ -162,17 +164,51 @@ function MultipleIsingFlips(Lattice::Array{Float32, 3}, L::Int, T::Float32, pi32
         NewNeighborToCheck, InCluster = AddNeighbors(i, j, T, L, Axis, InCluster, Lattice, pi32, rng) # check first i-1,j; then i,j-1; i+1,j and finally i,j+1
         CheckNeighbor = unique(vcat(CheckNeighbor,NewNeighborToCheck))
     end
+    twoθ = 2*θ
+    twoϕ = 2*ϕ
     @inbounds for i in 1:L, j in 1:L
         if InCluster[i,j]
-            Lattice[2,i,j] = pi32 - Lattice[2,i,j]  # need to be changed to flip along Axis
+            Lattice[2,i,j], turnPhi = FlipTheta(twoθ, Lattice[2,i,j], pi32)
+            Lattice[1,i,j] = FlipPhi(twoϕ, Lattice[1,i,j], turnPhi, pi32)
+            # Lattice[2,i,j] = pi32 - Lattice[2,i,j]  # need to be changed to flip along Axis
         end
     end
     return Lattice
 end
 
+function FlipTheta(twoθ::Float32, ThetaSpin::Float32, pi32::Float32)
+    x = twoθ - ThetaSpin
+    if x > 0 && x < pi32
+        ThetaSpin = pi32 - x
+        turnPhi = true
+    else
+        if x <= 0
+            ThetaSpin = pi32 + x
+        else    # x can only be between -pi and 2pi, thus, this is equivalent to if pi < x < 2pi
+            ThetaSpin = x - pi32
+        end
+        turnPhi = false
+    end
+    return ThetaSpin, turnPhi
+end
+
+function FlipPhi(twoϕ::Float32, PhiSpin::Float32, turnPhi::Bool, pi32::Float32)
+    x = twoϕ - PhiSpin + pi32*(1+turnPhi) # between -pi and 6pi, thus more efficient to do if elseif than modulo
+    if x < 0
+        PhiSpin = x + 2*pi32
+    elseif x < 2*pi32
+        PhiSpin = x
+    elseif x < 4*pi32
+        PhiSpin = x - 2*pi32
+    else
+        PhiSpin = x - 4*pi32
+    end
+    return PhiSpin
+end
+
 function AddNeighbors(i::Int64,j::Int64, T::Float32, L::Int, Axis::Vector{Float32}, InCluster::BitMatrix, Lattice::Array{Float32, 3}, pi32::Float32, rng::AbstractRNG)    # For Wolff update: add or not to the cluster the neighbors of a site already in the cluster
     NewNeighborToCheck = []
-    neighbor = [[mod(i-2,L)+1,j],[i,mod(j-2,L)+1],[mod(i,L)+1,j],[i,mod(j,L)+1]]    # The four neighbors (could be optimized using a?b:c instead of mod)
+    neighbor = [[i==1 ? L : i-1,j],[i,j==1 ? L : j-1],[i==L ? 1 : i+1,j],[i,j==L ? 1 : j+1]]    # The four neighbors (could be optimized using a?b:c instead of mod)
     dot0 = Correlation(Axis, Lattice[:,i,j])
     for n=1:4               # To check the four neighbors
         k,l = neighbor[n]
@@ -197,8 +233,8 @@ end
 
 function MHStep(step::Int, rep::Replica, L::Int, d::Float32, PBC::Bool, pi32::Float32, rng::AbstractRNG)   # ful MH step: i.e. lattice sweep or Wolff algorithm, and (potentially) adjust the three σ for the three gaussian proposal to be closer to a 50% acceptance rate
     Mz2 = Mag_z2(rep.Lattice, L)
-    if mod(step,1000)==0 && Mz2 > .7f0
-        rep.Lattice = MultipleIsingFlips(rep.Lattice, L, rep.T, pi32, rng)    # Wolff algorithm
+    if mod(step,1000)==0# && Mz2 > .7f0
+        rep.Lattice = ClusterUpdate(rep.Lattice, L, rep.T, pi32, rng)    # Wolff algorithm
     else
         rep.Lattice, Accept, Tr = LatticeSweep(rep.Lattice, L, rep.T, rep.σ, rep.σϕ, rep.σθ, pi32, PBC, d, IsingProba(Mz2), XYProba(Mz2), rng)
         @fastmath begin
@@ -220,7 +256,7 @@ function MHStep(step::Int, rep::Replica, L::Int, d::Float32, PBC::Bool, pi32::Fl
     return rep
 end
 
-function MH_parallel_tempering(L::Int, N::Int, T::Vector{Float32}, burn::Int, pi32::Float32, AllLattices::Vector{Int}, d::Float32, Save::Bool=false, SaveLattices::Bool=false, Skip::Int=10, swap::Int=100)     # Sampler
+function MH_parallel_tempering(L::Int, N::Int, T::Vector{Float32}, burn::Int, pi32::Float32, AllLattices::Vector{Int}, d::Float32, Save::Bool=false, SaveLattices::Bool=false, Skip::Int=10, swap::Int=80)     # Sampler
     nT = length(T)
     Lattices = Array{Array{Float64,3}, 2}(undef, nT, div(2000, Skip)-!(N%swap==0)*Skip)       # To save the last lattices, 
     Replicas = Vector{Replica}(undef, nT)
