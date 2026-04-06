@@ -16,13 +16,16 @@ function Energy(Lattice::Array{Float32, 3}, L::Int, PBC::Bool, d::Float32)    # 
         i2 = i==L ? 1 : i+1
         for j=1:n
             j2 = j==L ? 1 : j+1
-            E += -Correlation(Lattice[:, i, j], Lattice[:, i, j2]) - Correlation(Lattice[:, i, j], Lattice[:, i2, j]) + d * cos(Lattice[2, i, j])^2
+            Lat_ij = @SVector [Lattice[1, i, j], Lattice[2, i, j]]
+            neighbor_i = @SVector [Lattice[1, i, j2], Lattice[2, i, j2]]
+            neighbor_j = @SVector [Lattice[1, i2, j], Lattice[2, i2, j]]
+            E += -Correlation(Lat_ij, neighbor_i) - Correlation(Lat_ij, neighbor_j) + d * cos(Lat_ij[2])^2
         end
     end
     return E
 end #   @inbounds almost divide the execution time by 2
 
-@inline @fastmath @inbounds function Correlation(spin1::Vector{Float32}, spin2::Vector{Float32})
+@inline @fastmath @inbounds function Correlation(spin1::SVector{2, Float32}, spin2::SVector{2, Float32})
     sθ1, cθ1 = sincos(spin1[2])
     sθ2, cθ2 = sincos(spin2[2])
     return sθ1*sθ2*cos(spin1[1]-spin2[1]) + cθ1*cθ2
@@ -35,20 +38,20 @@ function Initial_lattice(L::Int, pi32::Float32)
     return lattice
 end
 
-@inline @fastmath @inbounds function EnergyDiff(spin0old::Vector{Float32}, spin0new::Vector{Float32}, spin1::Vector{Float32}, spin2::Vector{Float32}, spin3::Vector{Float32}, spin4::Vector{Float32}, d::Float32) # calculate the bounding energy difference between a spin and its neigbors and another one with the same neighbors
+@inline @fastmath @inbounds function EnergyDiff(spin0old::SVector{2, Float32}, spin0new::SVector{2, Float32}, spin1::SVector{2, Float32}, spin2::SVector{2, Float32}, spin3::SVector{2, Float32}, spin4::SVector{2, Float32}, d::Float32) # calculate the bounding energy difference between a spin and its neigbors and another one with the same neighbors
     sold, snew = sin(spin0old[2]), sin(spin0new[2])
     cold, cnew = cos(spin0old[2]), cos(spin0new[2])
     return (snew*cos(spin0new[1]-spin1[1]) - sold*cos(spin0old[1]-spin1[1]))*sin(spin1[2]) + (cnew-cold)*cos(spin1[2])  +  (snew*cos(spin0new[1]-spin2[1]) - sold*cos(spin0old[1]-spin2[1]))*sin(spin2[2]) + (cnew-cold)*cos(spin2[2])  +  (snew*cos(spin0new[1]-spin3[1]) - sold*cos(spin0old[1]-spin3[1]))*sin(spin3[2]) + (cnew-cold)*cos(spin3[2])  +  (snew*cos(spin0new[1]-spin4[1]) - sold*cos(spin0old[1]-spin4[1]))*sin(spin4[2]) + (cnew-cold)*cos(spin4[2])   +   d*(cold^2-cnew^2) # old - new for the last term, as H = - Σ Si Sj + d Σ Sz^2 (sign difference between these two terms)
 end
 
-@inline @fastmath @inbounds function EnergyDiffTheta(spin0old::Vector{Float32}, theta::Float32, spin1::Vector{Float32}, spin2::Vector{Float32}, spin3::Vector{Float32}, spin4::Vector{Float32}, d::Float32) # Like EnergyDiff but optimized for a change in theta only (for XY-theta sweep or Ising flip)
+@inline @fastmath @inbounds function EnergyDiffTheta(spin0old::SVector{2, Float32}, theta::Float32, spin1::SVector{2, Float32}, spin2::SVector{2, Float32}, spin3::SVector{2, Float32}, spin4::SVector{2, Float32}, d::Float32) # Like EnergyDiff but optimized for a change in theta only (for XY-theta sweep or Ising flip)
     sold, snew = sin(spin0old[2]), sin(theta)
     cold, cnew = cos(spin0old[2]), cos(theta)
     phi = spin0old[1]
     return (snew-sold)*(cos(phi-spin1[1])*sin(spin1[2]) + cos(phi-spin2[1])*sin(spin2[2]) + cos(phi-spin3[1])*sin(spin3[2]) + cos(phi-spin4[1])*sin(spin4[2])) + (cnew-cold)*(cos(spin1[2])+cos(spin2[2])+cos(spin3[2])+cos(spin4[2]))   +   d*(cold^2-cnew^2)
 end
 
-@inline @fastmath @inbounds function EnergyDiffPhi(spin0old::Vector{Float32}, phi::Float32, spin1::Vector{Float32}, spin2::Vector{Float32}, spin3::Vector{Float32}, spin4::Vector{Float32}) #  Like EnergyDiff but optimized for a change in phi only (for XY-phi sweep)
+@inline @fastmath @inbounds function EnergyDiffPhi(spin0old::SVector{2, Float32}, phi::Float32, spin1::SVector{2, Float32}, spin2::SVector{2, Float32}, spin3::SVector{2, Float32}, spin4::SVector{2, Float32}) #  Like EnergyDiff but optimized for a change in phi only (for XY-phi sweep)
     phiold = spin0old[1]
     return sin(spin0old[2])*((cos(phi-spin1[1])-cos(phiold-spin1[1]))*sin(spin1[2])  +  (cos(phi-spin2[1])-cos(phiold-spin2[1]))*sin(spin2[2])  +  (cos(phi-spin3[1])-cos(phiold-spin3[1]))*sin(spin3[2])  +  (cos(phi-spin4[1])-cos(phiold-spin4[1]))*sin(spin4[2]))
 end
@@ -56,27 +59,37 @@ end
 @inbounds function SingleFlip(Lattice::Array{Float32, 3}, i::Int, j::Int, T::Float32, L::Int, σ::Float32, σϕ::Float32, σθ::Float32, pi32::Float32, PBC::Bool, d::Float32, pIsing::Float32, pXY::Float32, rng::AbstractRNG)      # Try a new configuration (proposal) and either accept or reject it
     newspin, Whichflip = NewSpin(Lattice[:,i,j], σ, σϕ, σθ, pi32, pIsing, pXY, rng)
     if PBC==false
+        Lat_ij = @SVector [Lattice[1,i,j], Lattice[2,i,j]]
         Δ = 0f0
         if i!=1
-            Δ += Correlation(newspin, Lattice[:,i-1,j]) - Correlation(Lattice[:,i,j],Lattice[:,i-1,j]) # This is the right sign as the bounding energy is negative (and is calculate positively)
+            spin2 = @SVector [Lattice[1,i-1,j], Lattice[2,i-1,j]]
+            Δ += Correlation(newspin, spin2) - Correlation(Lat_ij,spin2) # This is the right sign as the bounding energy is negative (and is calculate positively)
         end
         if i != L
-            Δ += Correlation(newspin, Lattice[:,i+1,j]) - Correlation(Lattice[:,i,j],Lattice[:,i+1,j])
+            spin2 = @SVector [Lattice[1,i+1,j], Lattice[2,i+1,j]]
+            Δ += Correlation(newspin, spin2) - Correlation(Lat_ij,spin2)
         end
         if j != 1
-            Δ += Correlation(newspin, Lattice[:,i,j-1]) - Correlation(Lattice[:,i,j],Lattice[:,i,j-1])
+            spin2 = @SVector [Lattice[1,i,j-1], Lattice[2,i,j-1]]
+            Δ += Correlation(newspin, spin2) - Correlation(Lat_ij,spin2)
         end
         if j != L
-            Δ += Correlation(newspin, Lattice[:,i,j+1]) - Correlation(Lattice[:,i,j],Lattice[:,i,j+1])
+            spin2 = @SVector [Lattice[1,i,j+1], Lattice[2,i,j+1]]
+            Δ += Correlation(newspin, spin2) - Correlation(Lat_ij,spin2)
         end
         Δ += d * (cos(Lattice[2,i,j])^2 - cos(newspin[2])^2)
     else
+        Lat_ij = @SVector [Lattice[1,i,j], Lattice[2,i,j]]
+        neighbor1 = @SVector [Lattice[1,i==1 ? L : i-1,j], Lattice[2,i==1 ? L : i-1,j]]
+        neighbor2 = @SVector [Lattice[1,i,j==1 ? L : j-1], Lattice[2,i,j==1 ? L : j-1]]
+        neighbor3 = @SVector [Lattice[1,i==L ? 1 : i+1,j], Lattice[2,i==L ? 1 : i+1,j]]
+        neighbor4 = @SVector [Lattice[1,i,j==L ? 1 : j+1], Lattice[2,i,j==L ? 1 : j+1]]
         if Whichflip==1
-            Δ = EnergyDiff(Lattice[:,i,j], newspin, Lattice[:,i==1 ? L : i-1,j], Lattice[:,i,j==1 ? L : j-1], Lattice[:,i==L ? 1 : i+1,j], Lattice[:,i,j==L ? 1 : j+1],d)      # previously: Δ = Correlation(newspin,Lattice[:,mod(i-2,L)+1,j]) - Correlation(Lattice[:,i,j],Lattice[:,mod(i-2,L)+1,j])   +   Correlation(newspin,Lattice[:,mod(i,L)+1,j]) - Correlation(Lattice[:,i,j],Lattice[:,mod(i,L)+1,j])   +   Correlation(newspin,Lattice[:,i,mod(j-2,L)+1]) - Correlation(Lattice[:,i,j],Lattice[:,i,mod(j-2,L)+1])   +   Correlation(newspin,Lattice[:,i,mod(j,L)+1]) - Correlation(Lattice[:,i,j],Lattice[:,i,mod(j,L)+1])
+            Δ = EnergyDiff(Lat_ij, newspin, neighbor1, neighbor2, neighbor3, neighbor4,d)      # previously: Δ = Correlation(newspin,Lattice[:,mod(i-2,L)+1,j]) - Correlation(Lattice[:,i,j],Lattice[:,mod(i-2,L)+1,j])   +   Correlation(newspin,Lattice[:,mod(i,L)+1,j]) - Correlation(Lattice[:,i,j],Lattice[:,mod(i,L)+1,j])   +   Correlation(newspin,Lattice[:,i,mod(j-2,L)+1]) - Correlation(Lattice[:,i,j],Lattice[:,i,mod(j-2,L)+1])   +   Correlation(newspin,Lattice[:,i,mod(j,L)+1]) - Correlation(Lattice[:,i,j],Lattice[:,i,mod(j,L)+1])
         elseif Whichflip==3
-            Δ = EnergyDiffPhi(Lattice[:,i,j], newspin[1], Lattice[:,i==1 ? L : i-1,j], Lattice[:,i,j==1 ? L : j-1], Lattice[:,i==L ? 1 : i+1,j], Lattice[:,i,j==L ? 1 : j+1])
+            Δ = EnergyDiffPhi(Lat_ij, newspin[1], neighbor1, neighbor2, neighbor3, neighbor4)
         else # if Ising or XY-theta flip, as on both cases phi stay the same
-            Δ = EnergyDiffTheta(Lattice[:,i,j], newspin[2], Lattice[:,i==1 ? L : i-1,j], Lattice[:,i,j==1 ? L : j-1], Lattice[:,i==L ? 1 : i+1,j], Lattice[:,i,j==L ? 1 : j+1],d)
+            Δ = EnergyDiffTheta(Lat_ij, newspin[2], neighbor1, neighbor2, neighbor3, neighbor4,d)
         end
     end
     expdiff = exp(Δ/T)
@@ -112,7 +125,8 @@ end
             spin = NewPhiTheta(spin, σ, pi32, rng)
         end
     end
-    return spin, Whichflip
+    newspin = @SVector [spin[1], spin[2]]
+    return newspin, Whichflip
 end
 
 @inline function NewPhi(phi::Float32, σϕ::Float32, pi32::Float32, rng::AbstractRNG) # Propose a new phi
@@ -152,16 +166,17 @@ function LatticeSweep(Lattice::Array{Float32, 3}, L::Int, T::Float32, σ::Float3
 end
 
 function ClusterUpdate(Lattice::Array{Float32, 3}, L::Int, T::Float32, pi32::Float32, rng::AbstractRNG)      # Wolff update
+    β2 = 2/T
     ϕ = 2*pi32*rand(rng, Float32)
     θ = acos.(1 .- 2*rand(rng, Float32))
-    Axis = [ϕ, θ]    # random direction to flip the cluster
+    Axis = @SVector [ϕ, θ]    # random direction to flip the cluster
     k, l = rand(rng, 1:L, 2)
     InCluster = falses(L,L)
     InCluster[k,l] = true
-    CheckNeighbor = [[k,l]]
-    while CheckNeighbor != []
+    CheckNeighbor = [(k,l)]
+    while !isempty(CheckNeighbor)
         i,j = pop!(CheckNeighbor)
-        NewNeighborToCheck, InCluster = AddNeighbors(i, j, T, L, Axis, InCluster, Lattice, pi32, rng) # check first i-1,j; then i,j-1; i+1,j and finally i,j+1
+        NewNeighborToCheck, InCluster = AddNeighbors(i, j, β2, L, Axis, InCluster, Lattice, rng) # check first i-1,j; then i,j-1; i+1,j and finally i,j+1
         CheckNeighbor = unique(vcat(CheckNeighbor,NewNeighborToCheck))
     end
     twoθ = 2*θ
@@ -170,7 +185,6 @@ function ClusterUpdate(Lattice::Array{Float32, 3}, L::Int, T::Float32, pi32::Flo
         if InCluster[i,j]
             Lattice[2,i,j], turnPhi = FlipTheta(twoθ, Lattice[2,i,j], pi32)
             Lattice[1,i,j] = FlipPhi(twoϕ, Lattice[1,i,j], turnPhi, pi32)
-            # Lattice[2,i,j] = pi32 - Lattice[2,i,j]  # need to be changed to flip along Axis
         end
     end
     return Lattice
@@ -206,15 +220,15 @@ function FlipPhi(twoϕ::Float32, PhiSpin::Float32, turnPhi::Bool, pi32::Float32)
     return PhiSpin
 end
 
-function AddNeighbors(i::Int64,j::Int64, T::Float32, L::Int, Axis::Vector{Float32}, InCluster::BitMatrix, Lattice::Array{Float32, 3}, pi32::Float32, rng::AbstractRNG)    # For Wolff update: add or not to the cluster the neighbors of a site already in the cluster
+function AddNeighbors(i::Int64,j::Int64, β2::Float32, L::Int, Axis::SVector{2, Float32}, InCluster::BitMatrix, Lattice::Array{Float32, 3}, rng::AbstractRNG)    # For Wolff update: add or not to the cluster the neighbors of a site already in the cluster
     NewNeighborToCheck = []
-    neighbor = [[i==1 ? L : i-1,j],[i,j==1 ? L : j-1],[i==L ? 1 : i+1,j],[i,j==L ? 1 : j+1]]    # The four neighbors (could be optimized using a?b:c instead of mod)
-    dot0 = Correlation(Axis, Lattice[:,i,j])
+    neighbor = ((i==1 ? L : i-1,j),(i,j==1 ? L : j-1),(i==L ? 1 : i+1,j),(i,j==L ? 1 : j+1))    # The four neighbors (could be optimized using a?b:c instead of mod)
+    dot0 = Correlation(Axis, @SVector [Lattice[1,i,j], Lattice[2,i,j]])
     for n=1:4               # To check the four neighbors
         k,l = neighbor[n]
-        if InCluster[k,l] == false && rand(rng) < 1-exp(-2*dot0*Correlation(Axis, Lattice[:,k,l])/T)
+        if !InCluster[k,l] && rand(rng) < 1-exp(-β2*dot0*Correlation(Axis, @SVector [Lattice[1,k,l],Lattice[2,k,l]]))
             InCluster[k,l] = true
-            push!(NewNeighborToCheck, [k,l])
+            push!(NewNeighborToCheck, (k,l))
         end
     end
     return NewNeighborToCheck, InCluster
@@ -324,7 +338,9 @@ function RowCorr(Lattice::Array{Float32, 3}, L::Int, PBC::Bool)   # Return the a
             a=0f0
             for j=1:L
                 for k=1:(L-i)
-                    a+=Correlation(Lattice[:,j,k], Lattice[:,j,k+i])
+                    spin1 = @SVector [Lattice[1,j,k], Lattice[2,j,k]]
+                    spin2 = @SVector [Lattice[1,j,k+i], Lattice[2,j,k+i]]
+                    a+=Correlation(spin1, spin2)
                 end
             end
             corr[i] = a/((L-i)*L)
@@ -337,7 +353,9 @@ function RowCorr(Lattice::Array{Float32, 3}, L::Int, PBC::Bool)   # Return the a
             for j=1:L
                 for k=1:L
                     k2 = (k + i <= L) ? k + i : k + i - L # like modulo, but more efficient (only if x < 2y for mod(x,y))
-                    a+=Correlation(Lattice[:,j,k], Lattice[:,j,k2]) #cos(Lattice[1,j,k]-Lattice[1,j,mod(k+i-1,L)+1]) * cos(Lattice[2,j,k]-Lattice[2,j,mod(k+i-1,L)+1])
+                    spin1 = @SVector [Lattice[1,j,k], Lattice[2,j,k]]
+                    spin2 = @SVector [Lattice[1,j,k2], Lattice[2,j,k2]]
+                    a+=Correlation(spin1, spin2) #cos(Lattice[1,j,k]-Lattice[1,j,mod(k+i-1,L)+1]) * cos(Lattice[2,j,k]-Lattice[2,j,mod(k+i-1,L)+1])
                 end
             end
             corr[i] = a/L^2
