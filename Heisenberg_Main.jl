@@ -7,7 +7,6 @@ L=[8,12]                        # Lattice sizes
 T=Temperatures(.6,1.15,8)        # Temperatures .5,1.15,32
 d=Float32.([-1,1])              # anisotropic term
 PBC   = true                    # Periodic Boundary Conditions
-pi32  = Float32(π)
 Save  = true                    # to save Data in a folder named L_N (that needs to be created before, i.e.: [8, 12, 20]_1000000
 SaveLattices = false            # to save the (199 by default) last lattices of each chain
 
@@ -15,7 +14,7 @@ println("  --  $N sweeps  --  ")
 starttime = time()
 for z in d
     for l in L
-        E1, M1 = MH_parallel_tempering(l, N, T, burn, pi32, L, z, Save, SaveLattices)
+        E1, M1 = MH_parallel_tempering(l, N, T, burn, L, z, Save, SaveLattices)
     end
 end
 
