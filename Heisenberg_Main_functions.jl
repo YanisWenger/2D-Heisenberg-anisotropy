@@ -31,10 +31,11 @@ end #   @inbounds almost divide the execution time by 2
     return sθ1*sθ2*cos(spin1[1]-spin2[1]) + cθ1*cθ2
 end
 
-function Initial_lattice(L::Int, pi32::Float32)
+function Initial_lattice(L::Int)
+    rng = TaskLocalRNG()
     lattice = Array{Float32}(undef, 2, L, L)
-    lattice[1, :, :] .= 2*pi32*rand(TaskLocalRNG(), Float32, L, L)
-    lattice[2, :, :] .= acos.(1 .- 2*rand(TaskLocalRNG(), Float32, L, L))
+    lattice[1, :, :] .= 2*Float32(π)*rand(rng, Float32, L, L)
+    lattice[2, :, :] .= acos.(1 .- 2*rand(rng, Float32, L, L))
     return lattice
 end
 
@@ -56,8 +57,8 @@ end
     return sin(spin0old[2])*((cos(phi-spin1[1])-cos(phiold-spin1[1]))*sin(spin1[2])  +  (cos(phi-spin2[1])-cos(phiold-spin2[1]))*sin(spin2[2])  +  (cos(phi-spin3[1])-cos(phiold-spin3[1]))*sin(spin3[2])  +  (cos(phi-spin4[1])-cos(phiold-spin4[1]))*sin(spin4[2]))
 end
 
-@inbounds function SingleFlip(Lattice::Array{Float32, 3}, i::Int, j::Int, T::Float32, L::Int, σ::Float32, σϕ::Float32, σθ::Float32, pi32::Float32, PBC::Bool, d::Float32, pIsing::Float32, pXY::Float32, rng::AbstractRNG)      # Try a new configuration (proposal) and either accept or reject it
-    newspin, Whichflip = NewSpin(Lattice[:,i,j], σ, σϕ, σθ, pi32, pIsing, pXY, rng)
+@inbounds function SingleFlip(Lattice::Array{Float32, 3}, i::Int, j::Int, T::Float32, L::Int, σ::Float32, σϕ::Float32, σθ::Float32, PBC::Bool, d::Float32, pIsing::Float32, pXY::Float32, rng::AbstractRNG)      # Try a new configuration (proposal) and either accept or reject it
+    newspin, Whichflip = NewSpin(Lattice[:,i,j], σ, σϕ, σθ, pIsing, pXY, rng)
     if PBC==false
         Lat_ij = @SVector [Lattice[1,i,j], Lattice[2,i,j]]
         Δ = 0f0
@@ -94,7 +95,7 @@ end
     end
     expdiff = exp(Δ/T)
     if expdiff > 1 || expdiff > rand(rng)    # the second condition would be enough to make it works, but this is faster as sometimes it doesn't have to generate a random number
-        Lattice[1,i,j] = mod(newspin[1], 2*pi32)
+        Lattice[1,i,j] = mod(newspin[1], 2*Float32(π))
         Lattice[2,i,j] = newspin[2]
         acceptance=true
     else
@@ -103,43 +104,45 @@ end
     return Lattice[:,i,j], acceptance, Whichflip
 end
 
-@inbounds function NewSpin(spin::Vector{Float32}, σ::Float32, σϕ::Float32, σθ::Float32, pi32::Float32, pIsing::Union{Float32, Int}, pXY::Union{Float32, Int}, rng::AbstractRNG) # Choose which kind of proposal (isotropic one, Ising flip, only change phi, only change theta)
+@inbounds function NewSpin(spin::Vector{Float32}, σ::Float32, σϕ::Float32, σθ::Float32, pIsing::Union{Float32, Int}, pXY::Union{Float32, Int}, rng::AbstractRNG) # Choose which kind of proposal (isotropic one, Ising flip, only change phi, only change theta)
     if pIsing == 0 && pXY == 0
         Whichflip = 1
-        newspin = NewPhiTheta(spin, σ, pi32, rng)
+        newspin = NewPhiTheta(spin, σ, rng)
     else
         random = rand(rng)       # This way to generate less random number, thus faster code
         if pIsing > 0 && random < pIsing
             Whichflip = 2
-            newspin = @SVector [spin[1], pi32 - spin[2]]
+            newspin = @SVector [spin[1], Float32(π) - spin[2]]
         elseif random < pXY
             if random > .3*pXY
-                newspin = @SVector [NewPhi(spin[1], σϕ, pi32, rng), spin[2]]
+                newspin = @SVector [NewPhi(spin[1], σϕ, rng), spin[2]]
                 Whichflip = 3
             else
-                newspin = @SVector [spin[1], NewTheta(spin[2], σθ, pi32, rng)]
+                newspin = @SVector [spin[1], NewTheta(spin[2], σθ, rng)]
                 Whichflip = 4
             end
         else                    # Same thing than the first part of the function, to lose less time (as generate a random number takes way more time than an if / else
             Whichflip = 1
-            newspin = NewPhiTheta(spin, σ, pi32, rng)
+            newspin = NewPhiTheta(spin, σ, rng)
         end
     end
     return newspin, Whichflip
 end
 
-@inline function NewPhi(phi::Float32, σϕ::Float32, pi32::Float32, rng::AbstractRNG) # Propose a new phi
-    mod(rand(rng, Normal(phi, σϕ)), 2*pi32)
+@inline function NewPhi(phi::Float32, σϕ::Float32, rng::AbstractRNG) # Propose a new phi
+    mod(rand(rng, Normal(phi, σϕ)), 2*Float32(π))
 end
 
-@inline function NewTheta(theta::Float32, σθ::Float32, pi32::Float32, rng::AbstractRNG) # Propose a new Theta
+@inline function NewTheta(theta::Float32, σθ::Float32, rng::AbstractRNG) # Propose a new Theta
+    pi32 = Float32(π)
     theta = mod(rand(rng, Normal(theta, σθ)), 2*pi32)
     if theta > pi32; theta = 2*pi32 - theta
     end
     return theta
 end
 
-function NewPhiTheta(spin::Vector{Float32}, σ::Float32, pi32::Float32, rng::AbstractRNG) # Propose new phi and theta (isotropic sweep)
+function NewPhiTheta(spin::Vector{Float32}, σ::Float32, rng::AbstractRNG) # Propose new phi and theta (isotropic sweep)
+    pi32 = Float32(π)
     alpha  = rand(rng, Float32)*2*pi32
     @fastmath begin
         beta   = min(abs(rand(rng, Normal(0f0, σ))), pi32)
@@ -153,19 +156,19 @@ function NewPhiTheta(spin::Vector{Float32}, σ::Float32, pi32::Float32, rng::Abs
     return spin
 end
 
-function LatticeSweep(Lattice::Array{Float32, 3}, L::Int, T::Float32, σ::Float32, σϕ::Float32, σθ::Float32, pi32::Float32, PBC::Bool, d::Float32, pIsing::Float32, pXY::Float32, rng::AbstractRNG)    #MH lattice sweep
+function LatticeSweep(Lattice::Array{Float32, 3}, L::Int, T::Float32, σ::Float32, σϕ::Float32, σθ::Float32, PBC::Bool, d::Float32, pIsing::Float32, pXY::Float32, rng::AbstractRNG)    #MH lattice sweep
     Accept, Tr = zeros(Int, 4), zeros(Int, 4)
     @inbounds for j in 1:L, k in 1:L
-        Lattice[:,j,k], a, Whichflip = SingleFlip(Lattice,j,k,T,L,σ, σϕ, σθ, pi32, PBC, d, pIsing, pXY, rng)
+        Lattice[:,j,k], a, Whichflip = SingleFlip(Lattice,j,k,T,L,σ, σϕ, σθ, PBC, d, pIsing, pXY, rng)
         Accept[Whichflip]+=a
         Tr[Whichflip]+=1
     end
     return Lattice, Accept, Tr
 end
 
-function ClusterUpdate(Lattice::Array{Float32, 3}, L::Int, T::Float32, pi32::Float32, rng::AbstractRNG)      # Wolff update
+function ClusterUpdate(Lattice::Array{Float32, 3}, L::Int, T::Float32, rng::AbstractRNG)      # Wolff update
     β2 = 2/T
-    ϕ = 2*pi32*rand(rng, Float32)
+    ϕ = 2*Float32(π)*rand(rng, Float32)
     θ = acos.(1 .- 2*rand(rng, Float32))
     Axis = @SVector [ϕ, θ]    # random direction to flip the cluster
     k, l = rand(rng, 1:L, 2)
@@ -181,14 +184,15 @@ function ClusterUpdate(Lattice::Array{Float32, 3}, L::Int, T::Float32, pi32::Flo
     twoϕ = 2*ϕ
     @inbounds for i in 1:L, j in 1:L
         if InCluster[i,j]
-            Lattice[2,i,j], turnPhi = FlipTheta(twoθ, Lattice[2,i,j], pi32)
-            Lattice[1,i,j] = FlipPhi(twoϕ, Lattice[1,i,j], turnPhi, pi32)
+            Lattice[2,i,j], turnPhi = FlipTheta(twoθ, Lattice[2,i,j])
+            Lattice[1,i,j] = FlipPhi(twoϕ, Lattice[1,i,j], turnPhi)
         end
     end
     return Lattice
 end
 
-function FlipTheta(twoθ::Float32, ThetaSpin::Float32, pi32::Float32)
+function FlipTheta(twoθ::Float32, ThetaSpin::Float32)
+    pi32 = Float32(π)
     x = twoθ - ThetaSpin
     if x > 0 && x < pi32
         ThetaSpin = pi32 - x
@@ -204,7 +208,8 @@ function FlipTheta(twoθ::Float32, ThetaSpin::Float32, pi32::Float32)
     return ThetaSpin, turnPhi
 end
 
-function FlipPhi(twoϕ::Float32, PhiSpin::Float32, turnPhi::Bool, pi32::Float32)
+function FlipPhi(twoϕ::Float32, PhiSpin::Float32, turnPhi::Bool)
+    pi32 = Float32(π)
     x = twoϕ - PhiSpin + pi32*(1+turnPhi) # between -pi and 6pi, thus more efficient to do if elseif than modulo
     if x < 0
         PhiSpin = x + 2*pi32
@@ -243,12 +248,12 @@ function Swap(Replicas::Vector{Replica}, i::Int, rng_swap::AbstractRNG, βdiff_i
     end
 end
 
-function MHStep(step::Int, rep::Replica, L::Int, d::Float32, PBC::Bool, pi32::Float32, rng::AbstractRNG)   # ful MH step: i.e. lattice sweep or Wolff algorithm, and (potentially) adjust the three σ for the three gaussian proposal to be closer to a 50% acceptance rate
+function MHStep(step::Int, rep::Replica, L::Int, d::Float32, PBC::Bool, rng::AbstractRNG)   # ful MH step: i.e. lattice sweep or Wolff algorithm, and (potentially) adjust the three σ for the three gaussian proposal to be closer to a 50% acceptance rate
     Mz2 = Mag_z2(rep.Lattice, L)
     if mod(step,1000)==0# && Mz2 > .7f0
-        rep.Lattice = ClusterUpdate(rep.Lattice, L, rep.T, pi32, rng)    # Wolff algorithm
+        rep.Lattice = ClusterUpdate(rep.Lattice, L, rep.T, rng)    # Wolff algorithm
     else
-        rep.Lattice, Accept, Tr = LatticeSweep(rep.Lattice, L, rep.T, rep.σ, rep.σϕ, rep.σθ, pi32, PBC, d, IsingProba(Mz2), XYProba(Mz2), rng)
+        rep.Lattice, Accept, Tr = LatticeSweep(rep.Lattice, L, rep.T, rep.σ, rep.σϕ, rep.σθ, PBC, d, IsingProba(Mz2), XYProba(Mz2), rng)
         @fastmath begin
             if Tr[1] > 10
                 rep.σ = min(max(rep.σ*2*Accept[1]/Tr[1], 1/sqrt(step+1000)), 10)     # if the acceptance is higher (lower) than .5, sigma should increase (decreased) to explore more (less) the phase space to get closer to .5
@@ -268,13 +273,13 @@ function MHStep(step::Int, rep::Replica, L::Int, d::Float32, PBC::Bool, pi32::Fl
     return rep
 end
 
-function MH_parallel_tempering(L::Int, N::Int, T::Vector{Float32}, burn::Int, pi32::Float32, AllLattices::Vector{Int}, d::Float32, Save::Bool=false, SaveLattices::Bool=false, Skip::Int=10, swap::Int=80)     # Sampler
+function MH_parallel_tempering(L::Int, N::Int, T::Vector{Float32}, burn::Int, AllLattices::Vector{Int}, d::Float32, Save::Bool=false, SaveLattices::Bool=false, Skip::Int=10, swap::Int=80)     # Sampler
     nT = length(T)
     Lattices = Array{Array{Float64,3}, 2}(undef, nT, div(2000, Skip)-!(N%swap==0)*Skip)       # To save the last lattices, 
     Replicas = Vector{Replica}(undef, nT)
     βdiff = diff(1 ./T)    # inverse temperature difference, useful to swap lattices
     for i=1:nT                              # Initialize Replicas
-        lat = Initial_lattice(L, pi32)
+        lat = Initial_lattice(L)
         Replicas[i] = Replica(lat, T[i], Energy(lat, L, PBC, d), .25f0, .4f0, .25f0, [0,0,0,0], [0,0,0,0])
     end
     Nswap = div(N, swap)                            # number of lattice swap's try 
@@ -290,7 +295,7 @@ function MH_parallel_tempering(L::Int, N::Int, T::Vector{Float32}, burn::Int, pi
             rng = TaskLocalRNG()
             for j=1:swap
                 k = (i-1)*swap+j
-                Replicas[n] = MHStep(k, Replicas[n], L, d, PBC, pi32, rng)
+                Replicas[n] = MHStep(k, Replicas[n], L, d, PBC, rng)
                 if k > burn && mod(k, Skip) == 0            # to not measure every lattice sweeps
                     lat = Replicas[n].Lattice
                     m = div(k-burn, Skip)
