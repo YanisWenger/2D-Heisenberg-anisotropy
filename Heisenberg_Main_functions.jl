@@ -93,7 +93,7 @@ end
         end
     end
     expdiff = exp(Δ/T)
-    if expdiff > 1 || expdiff > rand(TaskLocalRNG())    # the second condition would be enough to make it works, but this is faster as sometimes it doesn't have to generate a random number
+    if expdiff > 1 || expdiff > rand(rng)    # the second condition would be enough to make it works, but this is faster as sometimes it doesn't have to generate a random number
         Lattice[1,i,j] = mod(newspin[1], 2*pi32)
         Lattice[2,i,j] = newspin[2]
         acceptance=true
@@ -106,26 +106,25 @@ end
 @inbounds function NewSpin(spin::Vector{Float32}, σ::Float32, σϕ::Float32, σθ::Float32, pi32::Float32, pIsing::Union{Float32, Int}, pXY::Union{Float32, Int}, rng::AbstractRNG) # Choose which kind of proposal (isotropic one, Ising flip, only change phi, only change theta)
     if pIsing == 0 && pXY == 0
         Whichflip = 1
-        spin = NewPhiTheta(spin, σ, pi32, rng)
+        newspin = NewPhiTheta(spin, σ, pi32, rng)
     else
         random = rand(rng)       # This way to generate less random number, thus faster code
         if pIsing > 0 && random < pIsing
             Whichflip = 2
-            spin[2] = pi32 - spin[2]
+            newspin = @SVector [spin[1], pi32 - spin[2]]
         elseif random < pXY
             if random > .3*pXY
-                spin[1] = NewPhi(spin[1], σϕ, pi32, rng)
+                newspin = @SVector [NewPhi(spin[1], σϕ, pi32, rng), spin[2]]
                 Whichflip = 3
             else
-                spin[2] = NewTheta(spin[2], σθ, pi32, rng)
+                newspin = @SVector [spin[1], NewTheta(spin[2], σθ, pi32, rng)]
                 Whichflip = 4
             end
-        else                                # Same thing than the first part of the function, to lose less time (as generate a random number takes way more time than an if / else
+        else                    # Same thing than the first part of the function, to lose less time (as generate a random number takes way more time than an if / else
             Whichflip = 1
-            spin = NewPhiTheta(spin, σ, pi32, rng)
+            newspin = NewPhiTheta(spin, σ, pi32, rng)
         end
     end
-    newspin = @SVector [spin[1], spin[2]]
     return newspin, Whichflip
 end
 
@@ -149,8 +148,7 @@ function NewPhiTheta(spin::Vector{Float32}, σ::Float32, pi32::Float32, rng::Abs
         sa, ca = sincos(alpha)
         sb, cb = sincos(beta)
         X = c2*sb*ca + s2*cb
-        spin[1] = atan(s1*X + c1*sb*sa,   c1*X - s1*sb*sa) # alpha is phi'
-        spin[2] = acos(clamp(c2*cb - s2*sb*ca, -1f0, 1f0))
+        spin = @SVector [atan(s1*X + c1*sb*sa,   c1*X - s1*sb*sa), acos(clamp(c2*cb - s2*sb*ca, -1f0, 1f0))] # alpha is phi'
     end
     return spin
 end
@@ -284,7 +282,7 @@ function MH_parallel_tempering(L::Int, N::Int, T::Vector{Float32}, burn::Int, pi
     Nmeasurement = div(N - burn, Skip)      # Number of measurement (as some sweeps are not measured to save some time)
     Energies = zeros(Float32, nT, Nmeasurement)
     Mag  = zeros(Float32, nT, Nmeasurement)
-    corr = [zeros(Float32, length(RowCorr(Initial_lattice(L, pi32), L, PBC))) for _ in 1:nT]
+    corr = [zeros(Float32, length(RowCorr(Replicas[1].Lattice, L, PBC))) for _ in 1:nT]
     SwapAcceptance = zeros(Int, nT-1)
     
     for i=1:Nswap
@@ -355,7 +353,7 @@ function RowCorr(Lattice::Array{Float32, 3}, L::Int, PBC::Bool)   # Return the a
                     k2 = (k + i <= L) ? k + i : k + i - L # like modulo, but more efficient (only if x < 2y for mod(x,y))
                     spin1 = @SVector [Lattice[1,j,k], Lattice[2,j,k]]
                     spin2 = @SVector [Lattice[1,j,k2], Lattice[2,j,k2]]
-                    a+=Correlation(spin1, spin2) #cos(Lattice[1,j,k]-Lattice[1,j,mod(k+i-1,L)+1]) * cos(Lattice[2,j,k]-Lattice[2,j,mod(k+i-1,L)+1])
+                    a += Correlation(spin1, spin2) #cos(Lattice[1,j,k]-Lattice[1,j,mod(k+i-1,L)+1]) * cos(Lattice[2,j,k]-Lattice[2,j,mod(k+i-1,L)+1])
                 end
             end
             corr[i] = a/L^2
