@@ -1,4 +1,4 @@
-using Distributions, Base.Threads, Random, JLD2, StaticArrays   # To have random distrib of spin, parallelize, interpolate, Random, save data in compact file, to use SVector which are optimized
+using Distributions, Base.Threads, Random, JLD2, StaticArrays, Base.Filesystem   # To have random distrib of spin, parallelize, interpolate, Random, save data in compact file, to use SVector which are optimized
 include("./Heisenberg_Main_functions.jl")
 
 const N=20000                         # Number of lattice sweeps
@@ -8,10 +8,13 @@ const T=Temperatures(.6,1.15,8)        # Temperatures .5,1.15,32
 const d=Float32.([-1,1])              # anisotropic term
 const PBC   = true                    # Periodic Boundary Conditions
 const Save  = true                    # to save Data in a folder named L_N (that needs to be created before, i.e.: [8, 12, 20]_1000000
-const   SaveLattices = false            # to save the (199 by default) last lattices of each chain
+const SaveLattices = false            # to save the (199 by default) last lattices of each chain
 
 println("  --  $N sweeps  --  ")
 starttime = time()
+if !isdir("Data/$(L)_$N")
+    mkpath("Data/$(L)_$N")
+end
 for z in d
     for l in L
         E1, M1 = MH_parallel_tempering(l, N, T, burn, L, z, Save, SaveLattices)
