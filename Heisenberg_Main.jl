@@ -1,14 +1,14 @@
 using Distributions, Base.Threads, Random, JLD2, StaticArrays   # To have random distrib of spin, parallelize, interpolate, Random, save data in compact file, to use SVector which are optimized
 include("./Heisenberg_Main_functions.jl")
 
-N=20000                         # Number of lattice sweeps
-burn = Int(min(N/4,100000))     # Burning period
-L=[8,12]                        # Lattice sizes
-T=Temperatures(.6,1.15,8)        # Temperatures .5,1.15,32
-d=Float32.([-1,1])              # anisotropic term
-PBC   = true                    # Periodic Boundary Conditions
-Save  = true                    # to save Data in a folder named L_N (that needs to be created before, i.e.: [8, 12, 20]_1000000
-SaveLattices = false            # to save the (199 by default) last lattices of each chain
+const N=20000                         # Number of lattice sweeps
+const burn = Int(min(N/4,100000))     # Burning period
+const L=[8,12]                        # Lattice sizes
+const T=Temperatures(.6,1.15,8)        # Temperatures .5,1.15,32
+const d=Float32.([-1,1])              # anisotropic term
+const PBC   = true                    # Periodic Boundary Conditions
+const Save  = true                    # to save Data in a folder named L_N (that needs to be created before, i.e.: [8, 12, 20]_1000000
+const   SaveLattices = false            # to save the (199 by default) last lattices of each chain
 
 println("  --  $N sweeps  --  ")
 starttime = time()
