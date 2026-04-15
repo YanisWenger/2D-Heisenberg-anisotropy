@@ -294,15 +294,15 @@ function MHStep(step::Int, rep::Replica, L::Int, D::Float32, PBC::Bool, rng::Abs
         rep.Lattice, Accept, Tr = LatticeSweep(rep.Lattice, L, rep.T, rep.σ, rep.σϕ, rep.σθ, PBC, D, IsingProba_Mz2, XYProba(Mz2), rng)
         @fastmath begin
             if Tr[1] > 10
-                rep.σ = min(max(rep.σ*2*Accept[1]/Tr[1], 1/sqrt(step+1000)), 10)     # if the acceptance is higher (lower) than .5, sigma should increase (decreased) to explore more (less) the phase space to get closer to .5
+                rep.σ = min(max(rep.σ*2.86*Accept[1]/Tr[1], 1/sqrt(step+1000)), 10)     # if the acceptance is higher (lower) than .35, sigma should increase (decreased) to explore more (less) the phase space to get closer to .35
             end
             if Tr[3] > 0
                 a = 1/(Tr[3]+2)
-                rep.σϕ = min(max(rep.σϕ*2*min(max(Accept[3]/Tr[3], a), 1-a), 1/sqrt(step + 1000)), 10)     # if the acceptance is higher (lower) than .5, sigma should increase (decreased) to explore more (less) the phase space to get closer to .5
+                rep.σϕ = min(max(rep.σϕ*2.27*min(max(Accept[3]/Tr[3], a), 1-a), 1/sqrt(step + 1000)), 10)     # if the acceptance is higher (lower) than .44, sigma should increase (decreased) to explore more (less) the phase space to get closer to .44
             end         # I could have used clamp(a,b,c) instead of min(max(a,c),b) but it is less efficient (around 50% slower)
             if Tr[4] > 0
                 a = 1/(Tr[4]+2)
-                rep.σθ = min(max(rep.σθ*2*min(max(Accept[4]/Tr[4], a), 1-a), 1/sqrt(step+10000)), 2)     # if the acceptance is higher (lower) than .5, sigma should increase (decreased) to explore more (less) the phase space to get closer to .5
+                rep.σθ = min(max(rep.σθ*2.27*min(max(Accept[4]/Tr[4], a), 1-a), 1/sqrt(step+10000)), 2)     # if the acceptance is higher (lower) than .44, sigma should increase (decreased) to explore more (less) the phase space to get closer to .44
             end
             rep.Acceptance += Accept
             rep.Try += Tr
@@ -367,7 +367,7 @@ function MH_parallel_tempering(L::Int, N::Int, T::Vector{Float32}, burn::Int, Al
         end
         @save "Data/$(AllLattices)_$N/swap_$(L)_$D.jld2" SwapAccept
     end
-    for n=1:nT; println("$L \t $D \t $(T[n]) \t $(Replicas[n].Acceptance ./ Replicas[n].Try) \t and Magz2 : $(mean(cos.(Replicas[n].Lattice[2,:,:]).^2)) \t $(Replicas[n].Cluster)"); end
+    for n=1:nT; println("$L \t $D \t $(T[n]) \t $(round.(Replicas[n].Acceptance ./ Replicas[n].Try; digits=3)) \t and Magz2 : $(round(mean(cos.(Replicas[n].Lattice[2,:,:]).^2); digits=3)) \t $(Replicas[n].Cluster)"); end
     return mean(Energies[1,:]), mean(Mag[1,:])
 end
 
