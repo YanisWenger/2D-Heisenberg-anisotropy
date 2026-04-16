@@ -1,5 +1,5 @@
 mutable struct Replica
-    Lattice::Array{Float32,3}
+    Lattice::Array{SVector{2,Float32},2}  # shape (L, L)
     T::Float32                  # Constant
     E::Float32                  # Instantaneous
     σ::Float32                  # Instantaneous
@@ -10,17 +10,15 @@ mutable struct Replica
     Cluster::Int64              # History (number of cluster update)
 end
 
-function Energy(Lattice::Array{Float32, 3}, L::Int, PBC::Bool, D::Float32)    # Calculate the Energy of a configuration
+function Energy(Lattice::Array{SVector{2,Float32},2}, L::Int, PBC::Bool, D::Float32)    # Calculate the Energy of a configuration
     E=0f0
     n = PBC ? L : L-1
     @inbounds for i=1:n
         i2 = i==L ? 1 : i+1
         @simd for j=1:n
             j2 = j==L ? 1 : j+1
-            Lat_ij = @SVector [Lattice[1, i, j], Lattice[2, i, j]]
-            neighbor_i = @SVector [Lattice[1, i, j2], Lattice[2, i, j2]]
-            neighbor_j = @SVector [Lattice[1, i2, j], Lattice[2, i2, j]]
-            E += -Correlation(Lat_ij, neighbor_i) - Correlation(Lat_ij, neighbor_j) + D * cos(Lat_ij[2])^2
+            Lat_ij = Lattice[i, j]
+            E += -Correlation(Lat_ij, Lattice[i, j2]) - Correlation(Lat_ij, Lattice[i2, j]) + D * cos(Lat_ij[2])^2
         end
     end
     return E
@@ -32,11 +30,8 @@ end #   @inbounds almost divide the execution time by 2
     return sθ1*sθ2*cos(spin1[1]-spin2[1]) + cθ1*cθ2
 end
 
-function Initial_lattice(L::Int, rng::AbstractRNG)
-    lattice = Array{Float32}(undef, 2, L, L)
-    lattice[1, :, :] .= 2*Float32(π)*rand(rng, Float32, L, L)
-    lattice[2, :, :] .= acos.(1 .- 2*rand(rng, Float32, L, L))
-    return lattice
+@inline function Initial_lattice(L::Int, rng::AbstractRNG)
+    return SVector{2,Float32}.(2f0 * π .* rand(rng, Float32, L, L),    acos.(1f0 .- 2f0 .* rand(rng, Float32, L, L)))
 end
 
 @inline @fastmath @inbounds function EnergyDiff(spin0old::SVector{2, Float32}, spin0new::SVector{2, Float32}, spin1::SVector{2, Float32}, spin2::SVector{2, Float32}, spin3::SVector{2, Float32}, spin4::SVector{2, Float32}, D::Float32) # calculate the bounding energy difference between a spin and its neigbors and another one with the same neighbors
@@ -57,54 +52,48 @@ end
     return sin(spin0old[2])*((cos(phi-spin1[1])-cos(phiold-spin1[1]))*sin(spin1[2])  +  (cos(phi-spin2[1])-cos(phiold-spin2[1]))*sin(spin2[2])  +  (cos(phi-spin3[1])-cos(phiold-spin3[1]))*sin(spin3[2])  +  (cos(phi-spin4[1])-cos(phiold-spin4[1]))*sin(spin4[2]))
 end
 
-@inbounds function SingleFlip(Lattice::Array{Float32, 3}, i::Int, j::Int, T::Float32, L::Int, σ::Float32, σϕ::Float32, σθ::Float32, PBC::Bool, D::Float32, pIsing::Float32, pXY::Float32, rng::AbstractRNG)      # Try a new configuration (proposal) and either accept or reject it
-    newspin, Whichflip = NewSpin(Lattice[:,i,j], σ, σϕ, σθ, pIsing, pXY, rng)
+@inbounds function SingleFlip(Lattice::Array{SVector{2,Float32},2}, i::Int, j::Int, T::Float32, L::Int, σ::Float32, σϕ::Float32, σθ::Float32, PBC::Bool, D::Float32, pIsing::Float32, pXY::Float32, rng::AbstractRNG)      # Try a new configuration (proposal) and either accept or reject it
+    newspin, Whichflip = NewSpin(Lattice[i,j], σ, σϕ, σθ, pIsing, pXY, rng)
     if PBC==false
-        Lat_ij = @SVector [Lattice[1,i,j], Lattice[2,i,j]]
+        Lat_ij = Lattice[i,j]
         Δ = 0f0
         if i!=1
-            spin2 = @SVector [Lattice[1,i-1,j], Lattice[2,i-1,j]]
+            spin2 = Lattice[i-1,j]
             Δ += Correlation(newspin, spin2) - Correlation(Lat_ij,spin2) # This is the right sign as the bounding energy is negative (and is calculate positively)
         end
         if i != L
-            spin2 = @SVector [Lattice[1,i+1,j], Lattice[2,i+1,j]]
+            spin2 = Lattice[1,i+1,j]
             Δ += Correlation(newspin, spin2) - Correlation(Lat_ij,spin2)
         end
         if j != 1
-            spin2 = @SVector [Lattice[1,i,j-1], Lattice[2,i,j-1]]
+            spin2 =Lattice[1,i,j-1]
             Δ += Correlation(newspin, spin2) - Correlation(Lat_ij,spin2)
         end
         if j != L
-            spin2 = @SVector [Lattice[1,i,j+1], Lattice[2,i,j+1]]
+            spin2 = Lattice[2,i,j+1]
             Δ += Correlation(newspin, spin2) - Correlation(Lat_ij,spin2)
         end
-        Δ += D * (cos(Lattice[2,i,j])^2 - cos(newspin[2])^2)
+        Δ += D * (cos(Lattice[i,j][2])^2 - cos(newspin[2])^2)
     else
-        Lat_ij = @SVector [Lattice[1,i,j], Lattice[2,i,j]]
-        neighbor1 = @SVector [Lattice[1,i==1 ? L : i-1,j], Lattice[2,i==1 ? L : i-1,j]]
-        neighbor2 = @SVector [Lattice[1,i,j==1 ? L : j-1], Lattice[2,i,j==1 ? L : j-1]]
-        neighbor3 = @SVector [Lattice[1,i==L ? 1 : i+1,j], Lattice[2,i==L ? 1 : i+1,j]]
-        neighbor4 = @SVector [Lattice[1,i,j==L ? 1 : j+1], Lattice[2,i,j==L ? 1 : j+1]]
         if Whichflip==1
-            Δ = EnergyDiff(Lat_ij, newspin, neighbor1, neighbor2, neighbor3, neighbor4,D)      # previously: Δ = Correlation(newspin,Lattice[:,mod(i-2,L)+1,j]) - Correlation(Lattice[:,i,j],Lattice[:,mod(i-2,L)+1,j])   +   Correlation(newspin,Lattice[:,mod(i,L)+1,j]) - Correlation(Lattice[:,i,j],Lattice[:,mod(i,L)+1,j])   +   Correlation(newspin,Lattice[:,i,mod(j-2,L)+1]) - Correlation(Lattice[:,i,j],Lattice[:,i,mod(j-2,L)+1])   +   Correlation(newspin,Lattice[:,i,mod(j,L)+1]) - Correlation(Lattice[:,i,j],Lattice[:,i,mod(j,L)+1])
+            Δ = EnergyDiff(Lattice[i,j], newspin, Lattice[i==1 ? L : i-1,j], Lattice[i,j==1 ? L : j-1], Lattice[i==L ? 1 : i+1,j], Lattice[i,j==L ? 1 : j+1],D)      # previously: Δ = Correlation(newspin,Lattice[:,mod(i-2,L)+1,j]) - Correlation(Lattice[:,i,j],Lattice[:,mod(i-2,L)+1,j])   +   Correlation(newspin,Lattice[:,mod(i,L)+1,j]) - Correlation(Lattice[:,i,j],Lattice[:,mod(i,L)+1,j])   +   Correlation(newspin,Lattice[:,i,mod(j-2,L)+1]) - Correlation(Lattice[:,i,j],Lattice[:,i,mod(j-2,L)+1])   +   Correlation(newspin,Lattice[:,i,mod(j,L)+1]) - Correlation(Lattice[:,i,j],Lattice[:,i,mod(j,L)+1])
         elseif Whichflip==3
-            Δ = EnergyDiffPhi(Lat_ij, newspin[1], neighbor1, neighbor2, neighbor3, neighbor4)
+            Δ = EnergyDiffPhi(Lattice[i,j], newspin[1], Lattice[i==1 ? L : i-1,j], Lattice[i,j==1 ? L : j-1], Lattice[i==L ? 1 : i+1,j], Lattice[i,j==L ? 1 : j+1])
         else # if Ising or XY-theta flip, as on both cases phi stay the same
-            Δ = EnergyDiffTheta(Lat_ij, newspin[2], neighbor1, neighbor2, neighbor3, neighbor4,D)
+            Δ = EnergyDiffTheta(Lattice[i,j], newspin[2], Lattice[i==1 ? L : i-1,j], Lattice[i,j==1 ? L : j-1], Lattice[i==L ? 1 : i+1,j], Lattice[i,j==L ? 1 : j+1],D)
         end
     end
     expdiff = exp(Δ/T)
     if expdiff > 1 || expdiff > rand(rng)    # the second condition would be enough to make it works, but this is faster as sometimes it doesn't have to generate a random number
-        Lattice[1,i,j] = mod(newspin[1], 2*Float32(π))
-        Lattice[2,i,j] = newspin[2]
+        Lattice[i,j] = newspin
         acceptance=true
     else
         acceptance=false
     end
-    return Lattice[:,i,j], acceptance, Whichflip
+    return Lattice[i,j], acceptance, Whichflip
 end
 
-@inbounds function NewSpin(spin::Vector{Float32}, σ::Float32, σϕ::Float32, σθ::Float32, pIsing::Union{Float32, Int}, pXY::Union{Float32, Int}, rng::AbstractRNG) # Choose which kind of proposal (isotropic one, Ising flip, only change phi, only change theta)
+@inbounds function NewSpin(spin::SVector{2, Float32}, σ::Float32, σϕ::Float32, σθ::Float32, pIsing::Union{Float32, Int}, pXY::Union{Float32, Int}, rng::AbstractRNG) # Choose which kind of proposal (isotropic one, Ising flip, only change phi, only change theta)
     if pIsing == 0 && pXY == 0
         Whichflip = 1
         newspin = NewPhiTheta(spin, σ, rng)
@@ -114,7 +103,7 @@ end
             Whichflip = 2
             newspin = @SVector [spin[1], Float32(π) - spin[2]]
         elseif random < pXY
-            if random > .3*pXY
+            if random < .7*pXY
                 newspin = @SVector [NewPhi(spin[1], σϕ, rng), spin[2]]
                 Whichflip = 3
             else
@@ -141,25 +130,25 @@ end
     return theta
 end
 
-function NewPhiTheta(spin::Vector{Float32}, σ::Float32, rng::AbstractRNG) # Propose new phi and theta (isotropic sweep)
-    pi32 = Float32(π)
-    alpha  = rand(rng, Float32)*2*pi32
+function NewPhiTheta(spin::SVector{2, Float32}, σ::Float32, rng::AbstractRNG) # Propose new phi and theta (isotropic sweep)
     @fastmath begin
+        pi32 = Float32(π)
+        alpha  = rand(rng, Float32)*2*pi32
         beta   = min(abs(rand(rng, Normal(0f0, σ))), pi32)
         s1, c1 = sincos(spin[1])
         s2, c2 = sincos(spin[2])
         sa, ca = sincos(alpha)
         sb, cb = sincos(beta)
         X = c2*sb*ca + s2*cb
-        spin = @SVector [atan(s1*X + c1*sb*sa,   c1*X - s1*sb*sa), acos(clamp(c2*cb - s2*sb*ca, -1f0, 1f0))] # alpha is phi'
+        spin = @SVector [atan(s1*X + c1*sb*sa,   c1*X - s1*sb*sa), acos(min(max(c2*cb - s2*sb*ca, -1f0), 1f0))] # need to clamp it (max and min are faster than clamp), as there are sometimes bad approximations
     end
     return spin
 end
 
-function LatticeSweep(Lattice::Array{Float32, 3}, L::Int, T::Float32, σ::Float32, σϕ::Float32, σθ::Float32, PBC::Bool, d::Float32, pIsing::Float32, pXY::Float32, rng::AbstractRNG)    #MH lattice sweep
+function LatticeSweep(Lattice::Array{SVector{2,Float32},2}, L::Int, T::Float32, σ::Float32, σϕ::Float32, σθ::Float32, PBC::Bool, d::Float32, pIsing::Float32, pXY::Float32, rng::AbstractRNG)    #MH lattice sweep
     Accept, Tr = zeros(Int, 4), zeros(Int, 4)
     @inbounds for k in 1:L, j in 1:L # faster as Julia stores arrays in column-major order
-        Lattice[:,j,k], a, Whichflip = SingleFlip(Lattice,j,k,T,L,σ, σϕ, σθ, PBC, d, pIsing, pXY, rng)
+        Lattice[j,k], a, Whichflip = SingleFlip(Lattice,j,k,T,L,σ, σϕ, σθ, PBC, d, pIsing, pXY, rng)
         Accept[Whichflip]+=a
         Tr[Whichflip]+=1
     end
@@ -200,14 +189,13 @@ function IsingClusterUpdate(ZLattice::AbstractArray{Float32, 2}, L::Int, T::Floa
     return ZLattice
 end
 
-# function ClusterUpdateIsotropic(Lattice::Array{Float32, 3}, L::Int, T::Float32, rng::AbstractRNG)      # Wolff update
+# function ClusterUpdateIsotropic(Lattice::Array{SVector{2,Float32},2}, L::Int, T::Float32, rng::AbstractRNG)      # Wolff update
 #     β2 = 2/T
 #     ϕ = 2*Float32(π)*rand(rng, Float32)     # random Axis
 #     θ = acos.(1 .- 2*rand(rng, Float32))
 #     k = rand(rng, 1:L)
 #     l = rand(rng, 1:L)
-#     # ϕ = Lattice[1,k,l]                    # Axis aligned with the first spin of the cluster (chosen randomly)
-#     # θ = Lattice[2,k,l]
+#     # ϕ, θ = Lattice[k,l]                    # Axis aligned with the first spin of the cluster (chosen randomly)
 #     Axis = @SVector [ϕ, θ]    # random direction to flip the cluster
 #     InCluster = falses(L,L)
 #     InCluster[k,l] = true
@@ -234,8 +222,8 @@ end
 #     twoϕ = 2*ϕ
 #     @inbounds for i in 1:L, j in 1:L
 #         if InCluster[i,j]
-#             Lattice[2,i,j], turnPhi = FlipTheta(twoθ, Lattice[2,i,j])
-#             Lattice[1,i,j] = FlipPhi(twoϕ, Lattice[1,i,j], turnPhi)
+#             theta, turnPhi = FlipTheta(twoθ, Lattice[i,j][2])
+#             Lattice[i,j] = @SVector [FlipPhi(twoϕ, Lattice[i,j][2], turnPhi), theta]
 #         end
 #     end
 #     return Lattice
@@ -285,10 +273,10 @@ function Swap(Replicas::Vector{Replica}, i::Int, rng_swap::AbstractRNG, βdiff_i
 end
 
 function MHStep(step::Int, rep::Replica, L::Int, D::Float32, PBC::Bool, rng::AbstractRNG)   # ful MH step: i.e. lattice sweep or Wolff algorithm, and (potentially) adjust the three σ for the three gaussian proposal to be closer to a 50% acceptance rate
-    Mz2 = Mag_z2(rep.Lattice, L)
+    Mz2 = Mag_z2(getindex.(rep.Lattice, 2), L)
     IsingProba_Mz2 = IsingProba(Mz2)
     if mod(step,100)==0 && IsingProba_Mz2 > 0 && IsingProba_Mz2 > rand(rng) # the second condition is mathematically useless because of the third, but it doesn't generate random number if proba =0
-        rep.Lattice[2,:,:] = IsingClusterUpdate(view(rep.Lattice, 2, : , : ), L, rep.T, rng)    # Wolff algorithm
+        rep.Lattice = SVector{2,Float32}.(getindex.(rep.Lattice, 1),    IsingClusterUpdate(getindex.(rep.Lattice, 2), L, rep.T, rng))    # Wolff algorithm
         rep.Cluster += 1
     else
         rep.Lattice, Accept, Tr = LatticeSweep(rep.Lattice, L, rep.T, rep.σ, rep.σϕ, rep.σθ, PBC, D, IsingProba_Mz2, XYProba(Mz2), rng)
@@ -313,7 +301,7 @@ end
 
 function MH_parallel_tempering(L::Int, N::Int, T::Vector{Float32}, burn::Int, AllLattices::Vector{Int}, D::Float32, Save::Bool=false, SaveLattices::Bool=false, Skip::Int=10, swap::Int=80)     # Sampler
     nT = length(T)
-    Lattices = Array{Array{Float64,3}, 2}(undef, nT, div(2000, Skip)-!(N%swap==0)*Skip)       # To save the last lattices, 
+    Lattices = Array{Array{SVector{2,Float32},2}}(undef, nT, div(2000, Skip)-!(N%swap==0)*Skip)       # To save the last lattices, 
     Replicas = Vector{Replica}(undef, nT)
     βdiff = diff(1 ./T)    # inverse temperature difference, useful to swap lattices
     seed = rand(1:10000)
@@ -367,11 +355,11 @@ function MH_parallel_tempering(L::Int, N::Int, T::Vector{Float32}, burn::Int, Al
         end
         @save "Data/$(AllLattices)_$N/swap_$(L)_$D.jld2" SwapAccept
     end
-    for n=1:nT; println("$L \t $D \t $(T[n]) \t $(round.(Replicas[n].Acceptance ./ Replicas[n].Try; digits=3)) \t and Magz2 : $(round(mean(cos.(Replicas[n].Lattice[2,:,:]).^2); digits=3)) \t $(Replicas[n].Cluster)"); end
+    for n=1:nT; println("$L \t $D \t $(T[n]) \t $(round.(Replicas[n].Acceptance ./ Replicas[n].Try; digits=3)) \t and Magz2 : $(round(Mag_z2(getindex.(Replicas[n].Lattice, 2), L); digits=3)) \t $(Replicas[n].Cluster)"); end
     return Energies[1,end]
 end
 
-function RowCorr(Lattice::Array{Float32, 3}, L::Int, PBC::Bool)   # Return the average row Correlation of the matrix (in a Correlation vector : first neigbour, second neigbour...)
+function RowCorr(Lattice::Array{SVector{2,Float32},2}, L::Int, PBC::Bool)   # Return the average row Correlation of the matrix (in a Correlation vector : first neigbour, second neigbour...)
     if PBC==false
         N = L-1
         corr = zeros(Float32, N)
@@ -379,9 +367,7 @@ function RowCorr(Lattice::Array{Float32, 3}, L::Int, PBC::Bool)   # Return the a
             a=0f0
             for j=1:L
                 for k=1:(L-i)
-                    spin1 = @SVector [Lattice[1,j,k], Lattice[2,j,k]]
-                    spin2 = @SVector [Lattice[1,j,k+i], Lattice[2,j,k+i]]
-                    a+=Correlation(spin1, spin2)
+                    a+=Correlation(Lattice[j,k], Lattice[j,k+i])
                 end
             end
             corr[i] = a/((L-i)*L)
@@ -394,9 +380,7 @@ function RowCorr(Lattice::Array{Float32, 3}, L::Int, PBC::Bool)   # Return the a
             for j=1:L
                 for k=1:L
                     k2 = (k + i <= L) ? k + i : k + i - L # like modulo, but more efficient (only if x < 2y for mod(x,y))
-                    spin1 = @SVector [Lattice[1,j,k], Lattice[2,j,k]]
-                    spin2 = @SVector [Lattice[1,j,k2], Lattice[2,j,k2]]
-                    a += Correlation(spin1, spin2) #cos(Lattice[1,j,k]-Lattice[1,j,mod(k+i-1,L)+1]) * cos(Lattice[2,j,k]-Lattice[2,j,mod(k+i-1,L)+1])
+                    a += Correlation(Lattice[j,k], Lattice[j,k2]) #cos(Lattice[1,j,k]-Lattice[1,j,mod(k+i-1,L)+1]) * cos(Lattice[2,j,k]-Lattice[2,j,mod(k+i-1,L)+1])
                 end
             end
             corr[i] = a/L^2
@@ -405,13 +389,14 @@ function RowCorr(Lattice::Array{Float32, 3}, L::Int, PBC::Bool)   # Return the a
     return corr
 end
 
-function mag(Lattice::Array{Float32,3}, L::Int64)
+function mag(Lattice::Array{SVector{2,Float32},2}, L::Int64)
     X = 0f0
     Y = 0f0
     Z = 0f0
     @inbounds @fastmath for k in 1:L, j in 1:L # faster as Julia stores arrays in column-major order
-        stheta, ctheta = sincos(Lattice[2,j,k])
-        sphi, cphi = sincos(Lattice[1,j,k])
+        lat_ij = Lattice[j,k]
+        stheta, ctheta = sincos(lat_ij[2])
+        sphi, cphi = sincos(lat_ij[1])
         x = cphi*stheta
         y = sphi*stheta
         z = ctheta
@@ -422,10 +407,10 @@ function mag(Lattice::Array{Float32,3}, L::Int64)
     return [X, Y, Z]/L^2
 end
 
-function Mag_z2(Lattice::Array{Float32,3}, L::Int64)
+function Mag_z2(ZLattice::Array{Float32,2}, L::Int64)
     magz2 = 0f0
     @inbounds @fastmath for j=1:L, k=1:L
-        magz2 += cos(Lattice[2,j,k])^2
+        magz2 += cos(ZLattice[j,k])^2
     end
     return magz2/L^2
 end
