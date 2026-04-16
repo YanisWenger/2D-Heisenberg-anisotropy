@@ -5,22 +5,23 @@ include("./Heisenberg_analysis_functions.jl")
 # ----- Initial parameters ----- #
 
 
-Nperbin = 100       # Number of measurements per bins
-PBC  = true         # Periodic Boundary Conditions
-N    = 1000_000     # Number of lattice sweeps
-L    = [8, 12, 20, 32, 50]  # Lattices size
+const Nperbin = 10       # Number of measurements per bins
+const PBC  = true         # Periodic Boundary Conditions
+const N    = 20_000     # Number of lattice sweeps
+const L    = [8,12]  # Lattices size
 
 
 # ----- Get data ----- #
 
 folder_name_end=""
-T, d, T_for_d = Get_T_d(N, L, folder_name_end)   # Obtain Temperature and anisotropic term in Data/$(L)_$N i.e. Data/[8, 12, 20]_1000000
+const T, d, T_for_d = Get_T_d(N, L, folder_name_end)   # Obtain Temperature and anisotropic term in Data/$(L)_$N i.e. Data/[8, 12, 20]_1000000
 Nmeasurement = length(load("Data/$(L)_$N$(folder_name_end)/$(L[1])_$(T_for_d[d[1]][1])_$(d[1]).jld2")[:"Energies"])
 Nbin = div(Nmeasurement, Nperbin)
 
 nL, nT, nd  =   length(L), length(T), length(d) # number of different lattices, temperatures and anisotropic term
 E, EΔ       =   zeros(Float32, nL, nT, nd), zeros(Float32, nL, nT, nd)
 M, MΔ       =   zeros(Float32, nL, nT, nd), zeros(Float32, nL, nT, nd)
+Mx, My, Mz, MxΔ, MyΔ, MzΔ = zeros(Float32, nL, nT, nd), zeros(Float32, nL, nT, nd), zeros(Float32, nL, nT, nd), zeros(Float32, nL, nT, nd), zeros(Float32, nL, nT, nd), zeros(Float32, nL, nT, nd)
 χ, χΔ       =   zeros(Float32, nL, nT, nd), zeros(Float32, nL, nT, nd)
 C, CΔ, CΔ2  =   zeros(Float32, nL, nT, nd), zeros(Float32, nL, nT, nd), zeros(Float32, nL, nT, nd)
 Acceptance  =   zeros(4, nL, nT, nd)
@@ -33,9 +34,15 @@ for l in eachindex(L)
         for t in eachindex(T_for_d[d[z]])
             Data = load("Data/$(L)_$N$(folder_name_end)/$(L[l])_$(T_for_d[d[z]][t])_$(d[z]).jld2")
             En = Data[:"Energies"]
-            Ma = Data[:"Mag"]
+            mx = Data[:"Mx"]
+            my = Data[:"My"]
+            mz = Data[:"Mz"]
+            Ma = sqrt.(mx.^2+my.^2+mz.^2)
             E[l,t,z], EΔ[l,t,z] = mean(En),                             std(Binor(En, Nbin, Nperbin))/sqrt(Nbin)
             M[l,t,z], MΔ[l,t,z] = mean(Ma),                             std(Binor(Ma, Nbin, Nperbin))/sqrt(Nbin)
+            Mx[l,t,z], MxΔ[l,t,z] = mean(mx),                           std(Binor(mx, Nbin, Nperbin))/sqrt(Nbin)
+            My[l,t,z], MyΔ[l,t,z] = mean(my),                           std(Binor(my, Nbin, Nperbin))/sqrt(Nbin)
+            Mz[l,t,z], MzΔ[l,t,z] = mean(mz),                           std(Binor(mz, Nbin, Nperbin))/sqrt(Nbin)
             χ[l,t,z], χΔ[l,t,z] = (mean(Ma.^2)-M[l,t,z]^2)/T[t]*L[l]^2, std(Binor2nd(Ma, Nbin, Nperbin, T[t], L[l]))/sqrt(Nbin)
             C[l,t,z], CΔ[l,t,z], CΔ2[l,t,z] = (mean(En.^2)-E[l,t,z]^2)/T[t]^2*L[l]^2, Errorpropagation(Binor(En, Nbin, Nperbin), EΔ[l,t,z])/T[t]^2*L[l]^2,      std(Binor2nd(En, Nbin, Nperbin, T[t], L[l]))/T[t]/sqrt(Nbin)
             Corr[l,t,z]         = Data[:"corr"]
@@ -57,6 +64,8 @@ plotL(L, T_for_d, d, M, 1, "M", MΔ)  # Plot all lattice sizes for the same d.  
 plotL(L, T_for_d, d, χ, 1, "Susc", χΔ)
 plotL(L, T_for_d, d, E, 1, "E", EΔ)
 plotL(L, T_for_d, d, C, 1, "C", CΔ2)
+println("80 swap : $(mean(SwapAccept[:,1]))")
+plot(T[2:end],diff(E[1,:,1]))
 
 plotd(L, T_for_d, d, χ, "Susc", χΔ,5)   # Plot all the d for a given lattice size (last number for lattice size : L[#], the bigger one by default)
 # plotd(L, T_for_d, d, C, "C", CΔ, 3)   # with error propag from ΔE, smaller error bars
@@ -99,3 +108,4 @@ a = CritLength(Corr[5,20,13], L[5])
 
 # error bar on Plot_Max_C_Χ
 # fit corrlength
+# check litterature XY susc shape

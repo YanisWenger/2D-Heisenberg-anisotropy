@@ -7,7 +7,7 @@ mutable struct Replica
     σθ::Float32                 # Instantaneous
     Acceptance::Vector{Int64}   # History
     Try::Vector{Int64}          # History
-    Cluster::Int64
+    Cluster::Int64              # History (number of cluster update)
 end
 
 function Energy(Lattice::Array{Float32, 3}, L::Int, PBC::Bool, D::Float32)    # Calculate the Energy of a configuration
@@ -15,7 +15,7 @@ function Energy(Lattice::Array{Float32, 3}, L::Int, PBC::Bool, D::Float32)    # 
     n = PBC ? L : L-1
     @inbounds for i=1:n
         i2 = i==L ? 1 : i+1
-        for j=1:n
+        @simd for j=1:n
             j2 = j==L ? 1 : j+1
             Lat_ij = @SVector [Lattice[1, i, j], Lattice[2, i, j]]
             neighbor_i = @SVector [Lattice[1, i, j2], Lattice[2, i, j2]]
@@ -325,8 +325,8 @@ function MH_parallel_tempering(L::Int, N::Int, T::Vector{Float32}, burn::Int, Al
     Nswap = div(N, swap)                            # number of lattice swap's try 
     println("$N, $Nswap, $swap, $(Nswap*swap)")
     Nmeasurement = div(N - burn, Skip)      # Number of measurement (as some sweeps are not measured to save some time)
-    Energies = zeros(Float32, nT, Nmeasurement)
-    Mag  = zeros(Float32, nT, Nmeasurement)
+    Energies = Array{Float32}(undef, nT, Nmeasurement)
+    Mag  = Array{Float32}(undef, nT, Nmeasurement, 3)
     corr = [zeros(Float32, length(RowCorr(Replicas[1].Lattice, L, PBC))) for _ in 1:nT]
     SwapAcceptance = zeros(Int, nT-1)
     
@@ -339,7 +339,7 @@ function MH_parallel_tempering(L::Int, N::Int, T::Vector{Float32}, burn::Int, Al
                     lat = Replicas[n].Lattice
                     m = div(k-burn, Skip)
                     Energies[n, m] = Energy(lat, L, PBC, D)
-                    Mag[n, m] = mag(lat, L)
+                    Mag[n, m, :] = mag(lat, L)
                     corr[n] += RowCorr(lat, L, PBC)
                     if SaveLattices && k > N-2000
                         kk = div(k+2000-N, Skip)
@@ -360,15 +360,15 @@ function MH_parallel_tempering(L::Int, N::Int, T::Vector{Float32}, burn::Int, Al
         for n=1:nT
             accept = Replicas[n].Acceptance ./ Replicas[n].Try
             if SaveLattices
-                @save "Data/$(AllLattices)_$N/$(L)_$(T[n])_$D.jld2" Energies=Energies[n,:] Mag=Mag[n,:] corr=corr[n] accept Lattices=Lattices[n,:]
+                @save "Data/$(AllLattices)_$N/$(L)_$(T[n])_$D.jld2" Energies=Energies[n,:] Mx=Mag[n,:,1] My=Mag[n,:,2] Mz=Mag[n,:,3] corr=corr[n] accept Lattices=Lattices[n,:]
             else
-                @save "Data/$(AllLattices)_$N/$(L)_$(T[n])_$D.jld2" Energies=Energies[n,:] Mag=Mag[n,:] corr=corr[n] accept
+                @save "Data/$(AllLattices)_$N/$(L)_$(T[n])_$D.jld2" Energies=Energies[n,:] Mx=Mag[n,:,1] My=Mag[n,:,2] Mz=Mag[n,:,3] corr=corr[n] accept
             end
         end
         @save "Data/$(AllLattices)_$N/swap_$(L)_$D.jld2" SwapAccept
     end
     for n=1:nT; println("$L \t $D \t $(T[n]) \t $(round.(Replicas[n].Acceptance ./ Replicas[n].Try; digits=3)) \t and Magz2 : $(round(mean(cos.(Replicas[n].Lattice[2,:,:]).^2); digits=3)) \t $(Replicas[n].Cluster)"); end
-    return mean(Energies[1,:]), mean(Mag[1,:])
+    return Energies[1,end]
 end
 
 function RowCorr(Lattice::Array{Float32, 3}, L::Int, PBC::Bool)   # Return the average row Correlation of the matrix (in a Correlation vector : first neigbour, second neigbour...)
@@ -419,7 +419,7 @@ function mag(Lattice::Array{Float32,3}, L::Int64)
         Y +=y
         Z +=z
     end
-    return sqrt(X^2+Y^2+Z^2)/L^2
+    return [X, Y, Z]/L^2
 end
 
 function Mag_z2(Lattice::Array{Float32,3}, L::Int64)
