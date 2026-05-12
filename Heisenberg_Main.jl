@@ -1,31 +1,30 @@
-using Distributions, Base.Threads, Random, JLD2, StaticArrays, Base.Filesystem   # To have random distrib of spin, parallelize, interpolate, Random, save data in compact file, to use SVector which are optimized
+using Distributions, Base.Threads, Random, JLD2, StaticArrays, Base.Filesystem   # To have random distrib of spin, parallelize, interpolate, Random, save data in compact file, to use SVector which are optimized, to create folder
 include("./Heisenberg_Main_functions.jl")
 
 const N=20000                         # Number of lattice sweeps
 const burn = Int(min(N/4,100000))     # Burning period
 const L=[8,12]                        # Lattice sizes
-const T=Temperatures(.6,1.15,8)        # Temperatures .5,1.15,32
-const d=Float32.([-1,1])              # anisotropic term
+const T=Temperatures(.55,1.15,32)     # Temperatures
+const D=Float32.([-1,1])              # Anisotropic term
 const PBC   = true                    # Periodic Boundary Conditions
-const Save  = true                    # to save Data in a folder named L_N (that needs to be created before, i.e.: [8, 12, 20]_1000000
-const SaveLattices = false            # to save the (199 by default) last lattices of each chain
+const Save  = true                    # To save Data in a folder named L_N
+const SaveLattices = false            # To save the (199 by default) last lattices of each chain
 
 println("  --  $N sweeps  --  ")
 starttime = time()
 if !isdir("Data/$(L)_$N")
     mkpath("Data/$(L)_$N")
 end
-for z in d
+for d in D
     for l in L
-        E1, M1 = MH_parallel_tempering(l, N, T, burn, L, z, Save, SaveLattices)
+        E1_end = MH_parallel_tempering(l, N, T, burn, L, d, Save, SaveLattices)
     end
 end
 
 t = round(Int, time()-starttime)
 if Save == true
-    open("Data/$(L)_$N/elapsed_time.txt", "a") do file; write(file, "$t\n$d\n$T\n\n"); end
+    open("Data/$(L)_$N/elapsed_time.txt", "a") do file
+        write(file, "$t\n$D\n$T\n\n")
+    end
 end
-
 println(t)
-
-# without fastmath, with cluster update every 50, with swap every 10, with 2x16 instead of 32T

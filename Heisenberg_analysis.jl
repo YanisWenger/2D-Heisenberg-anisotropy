@@ -1,56 +1,60 @@
-using Distributions, Plots, ColorSchemes, Colors, CSV, DataFrames, Dierckx, LsqFit, JLD2, Glob, Primes   # To have basic math (mean), To plot, colors for lattices, write/read csv (CSV & DataFrames), interpolate, save data in compact file, glob to read files and name files, To get divisors of a number
+using Distributions, Plots, ColorSchemes, Colors, CSV, DataFrames, Dierckx, LsqFit, JLD2, Glob, Primes, MCMCChains   # To have basic math (mean), To plot, colors for lattices, write/read csv (CSV & DataFrames), interpolate, save data in compact file, glob to read files and name files, To get divisors of a number
 include("./Heisenberg_analysis_functions.jl")
 
 
 # ----- Initial parameters ----- #
 
 
-const Nperbin = 10       # Number of measurements per bins
+const N    = 1000_000     # Number of lattice sweeps
+const L    = [8,12,20,32,50,70]  # Lattices size
+const Nperbin = 100       # Number of measurements per bins
 const PBC  = true         # Periodic Boundary Conditions
-const N    = 20_000     # Number of lattice sweeps
-const L    = [8,12]  # Lattices size
+folder_name_end=""
 
 
 # ----- Get data ----- #
 
-folder_name_end=""
-const T, d, T_for_d = Get_T_d(N, L, folder_name_end)   # Obtain Temperature and anisotropic term in Data/$(L)_$N i.e. Data/[8, 12, 20]_1000000
-Nmeasurement = length(load("Data/$(L)_$N$(folder_name_end)/$(L[1])_$(T_for_d[d[1]][1])_$(d[1]).jld2")[:"Energies"])
+const T, D, T_for_DL = Get_T_DL(N, L, folder_name_end)   # Obtain Temperature and anisotropic term in Data/$(L)_$N i.e. Data/[8, 12, 20]_1000000
+Nmeasurement = length(load("Data/$(L)_$N$(folder_name_end)/$(L[1])_$(T_for_DL[(L[1],D[1])][1])_$(D[1]).jld2")[:"Energies"])
 Nbin = div(Nmeasurement, Nperbin)
 
-nL, nT, nd  =   length(L), length(T), length(d) # number of different lattices, temperatures and anisotropic term
-E, EΔ       =   zeros(Float32, nL, nT, nd), zeros(Float32, nL, nT, nd)
-M, MΔ       =   zeros(Float32, nL, nT, nd), zeros(Float32, nL, nT, nd)
-Mx, My, Mz, MxΔ, MyΔ, MzΔ = zeros(Float32, nL, nT, nd), zeros(Float32, nL, nT, nd), zeros(Float32, nL, nT, nd), zeros(Float32, nL, nT, nd), zeros(Float32, nL, nT, nd), zeros(Float32, nL, nT, nd)
-χ, χΔ       =   zeros(Float32, nL, nT, nd), zeros(Float32, nL, nT, nd)
-C, CΔ, CΔ2  =   zeros(Float32, nL, nT, nd), zeros(Float32, nL, nT, nd), zeros(Float32, nL, nT, nd)
-Acceptance  =   zeros(4, nL, nT, nd)
-Corr        =   Array{Vector{Float32}}(undef, nL, nT, nd)
-# AllLattices =   Array{Vector{Array{Float32, 3}}}(undef, nL, nT, nd) # for Correlation time (do not exists by default)
-SwapAccept  =   Array{Vector}(undef, nL, nd)    # acceptance of the lattices swap (parallel tempering)
+nL, nT, nD  =   length(L), length(T), length(D) # number of different lattices, temperatures and anisotropic term
+E, EΔ       =   zeros(Float32, nL, nT, nD), zeros(Float32, nL, nT, nD)
+M, MΔ       =   zeros(Float32, nL, nT, nD), zeros(Float32, nL, nT, nD)
+Mx, My, Mz, MxΔ, MyΔ, MzΔ = zeros(Float32, nL, nT, nD), zeros(Float32, nL, nT, nD), zeros(Float32, nL, nT, nD), zeros(Float32, nL, nT, nD), zeros(Float32, nL, nT, nD), zeros(Float32, nL, nT, nD)
+χ, χΔ       =   zeros(Float32, nL, nT, nD), zeros(Float32, nL, nT, nD)
+χx, χy, χz, χxΔ, χyΔ, χzΔ       =   zeros(Float32, nL, nT, nD), zeros(Float32, nL, nT, nD), zeros(Float32, nL, nT, nD), zeros(Float32, nL, nT, nD), zeros(Float32, nL, nT, nD), zeros(Float32, nL, nT, nD)
+C, CΔ, CΔ2  =   zeros(Float32, nL, nT, nD), zeros(Float32, nL, nT, nD), zeros(Float32, nL, nT, nD)
+Acceptance  =   zeros(4, nL, nT, nD)
+Corr        =   Array{Vector{Float32}}(undef, nL, nT, nD)
+# AllLattices =   Array{Vector{Array{Float32, 3}}}(undef, nL, nT, nD) # for Correlation time (do not exists by default)
+SwapAccept  =   Array{Vector}(undef, nL, nD)    # acceptance of the lattices swap (parallel tempering)
 
 for l in eachindex(L)
-    for z in eachindex(d)
-        for t in eachindex(T_for_d[d[z]])
-            Data = load("Data/$(L)_$N$(folder_name_end)/$(L[l])_$(T_for_d[d[z]][t])_$(d[z]).jld2")
+    for d in eachindex(D)
+        for t in eachindex(T_for_DL[(L[l], D[d])])
+            Data = load("Data/$(L)_$N$(folder_name_end)/$(L[l])_$(T_for_DL[(L[l], D[d])][t])_$(D[d]).jld2")
             En = Data[:"Energies"]
             mx = Data[:"Mx"]
             my = Data[:"My"]
             mz = Data[:"Mz"]
             Ma = sqrt.(mx.^2+my.^2+mz.^2)
-            E[l,t,z], EΔ[l,t,z] = mean(En),                             std(Binor(En, Nbin, Nperbin))/sqrt(Nbin)
-            M[l,t,z], MΔ[l,t,z] = mean(Ma),                             std(Binor(Ma, Nbin, Nperbin))/sqrt(Nbin)
-            Mx[l,t,z], MxΔ[l,t,z] = mean(mx),                           std(Binor(mx, Nbin, Nperbin))/sqrt(Nbin)
-            My[l,t,z], MyΔ[l,t,z] = mean(my),                           std(Binor(my, Nbin, Nperbin))/sqrt(Nbin)
-            Mz[l,t,z], MzΔ[l,t,z] = mean(mz),                           std(Binor(mz, Nbin, Nperbin))/sqrt(Nbin)
-            χ[l,t,z], χΔ[l,t,z] = (mean(Ma.^2)-M[l,t,z]^2)/T[t]*L[l]^2, std(Binor2nd(Ma, Nbin, Nperbin, T[t], L[l]))/sqrt(Nbin)
-            C[l,t,z], CΔ[l,t,z], CΔ2[l,t,z] = (mean(En.^2)-E[l,t,z]^2)/T[t]^2*L[l]^2, Errorpropagation(Binor(En, Nbin, Nperbin), EΔ[l,t,z])/T[t]^2*L[l]^2,      std(Binor2nd(En, Nbin, Nperbin, T[t], L[l]))/T[t]/sqrt(Nbin)
-            Corr[l,t,z]         = Data[:"corr"]
-            Acceptance[:,l,t,z] = Data[:"accept"]
-            # AllLattices[l,t,z] = Data[:"Lattices"]
-            # println("N = ", L[l], "\tT = ", T[t], " \td = ", d[z], "\t E = ", round(E[l,t,z];digits=3), " ± ", round(EΔ[l,t,z];digits=5), "\tM = ", round(M[l,t,z];digits=3), " ± ", round(MΔ[l,t,z];digits=5), " \t χ = ", round(χ[l,t,z];digits=3), " ± ", round(χΔ[l,t,z];digits=3), "\tC = ", round(C[l,t,z];digits=3), " ± ", round(CΔ[l,t,z];digits=4), "\taccept = ", round.(Acceptance[:,l,t,z];digits=3))
+            E[l,t,d], EΔ[l,t,d] = mean(En),                             std(Binor(En, Nbin, Nperbin))/sqrt(Nbin)
+            M[l,t,d], MΔ[l,t,d] = mean(Ma),                             std(Binor(Ma, Nbin, Nperbin))/sqrt(Nbin)
+            Mx[l,t,d], MxΔ[l,t,d] = mean(mx),                           std(Binor(mx, Nbin, Nperbin))/sqrt(Nbin)
+            My[l,t,d], MyΔ[l,t,d] = mean(my),                           std(Binor(my, Nbin, Nperbin))/sqrt(Nbin)
+            Mz[l,t,d], MzΔ[l,t,d] = mean(mz),                           std(Binor(mz, Nbin, Nperbin))/sqrt(Nbin)
+            χ[l,t,d], χΔ[l,t,d] = (mean(Ma.^2)-M[l,t,d]^2)/T[t]*L[l]^2, std(Binor2nd(Ma, Nbin, Nperbin, T[t], L[l]))/sqrt(Nbin)
+            χx[l,t,d], χxΔ[l,t,d] = (mean(mx.^2)-Mx[l,t,d]^2)/T[t]*L[l]^2, std(Binor2nd(mx, Nbin, Nperbin, T[t], L[l]))/sqrt(Nbin)
+            χy[l,t,d], χyΔ[l,t,d] = (mean(my.^2)-My[l,t,d]^2)/T[t]*L[l]^2, std(Binor2nd(my, Nbin, Nperbin, T[t], L[l]))/sqrt(Nbin)
+            χz[l,t,d], χzΔ[l,t,d] = (mean(mz.^2)-Mz[l,t,d]^2)/T[t]*L[l]^2, std(Binor2nd(mz, Nbin, Nperbin, T[t], L[l]))/sqrt(Nbin)
+            C[l,t,d], CΔ[l,t,d], CΔ2[l,t,d] = (mean(En.^2)-E[l,t,d]^2)/T[t]^2*L[l]^2, Errorpropagation(Binor(En, Nbin, Nperbin), EΔ[l,t,d])/T[t]^2*L[l]^2,      std(Binor2nd(En, Nbin, Nperbin, T[t], L[l]))/T[t]/sqrt(Nbin)
+            Corr[l,t,d]         = Data[:"corr"]
+            Acceptance[:,l,t,d] = Data[:"accept"]
+            # AllLattices[l,t,d] = Data[:"Lattices"]
+            # println("N = ", L[l], "\tT = ", T[t], " \td = ", D[d], "\t E = ", round(E[l,t,d];digits=3), " ± ", round(EΔ[l,t,d];digits=5), "\tM = ", round(M[l,t,d];digits=3), " ± ", round(MΔ[l,t,d];digits=5), " \t χ = ", round(χ[l,t,d];digits=3), " ± ", round(χΔ[l,t,d];digits=3), "\tC = ", round(C[l,t,d];digits=3), " ± ", round(CΔ[l,t,d];digits=4), "\taccept = ", round.(Acceptance[:,l,t,d];digits=3))
         end
-        SwapAccept[l,z] = load("Data/$(L)_$N$(folder_name_end)/swap_$(L[l])_$(d[z]).jld2")[:"SwapAccept"]
+        SwapAccept[l,d] = load("Data/$(L)_$N$(folder_name_end)/swap_$(L[l])_$(D[d])_$(T[1]).jld2")[:"SwapAccept"]
     end
     print(L[l], "     ")
 end
@@ -60,52 +64,62 @@ end
 
 
 
-plotL(L, T_for_d, d, M, 1, "M", MΔ)  # Plot all lattice sizes for the same d.    Fifth entry for which d
-plotL(L, T_for_d, d, χ, 1, "Susc", χΔ)
-plotL(L, T_for_d, d, E, 1, "E", EΔ)
-plotL(L, T_for_d, d, C, 1, "C", CΔ2)
-println("80 swap : $(mean(SwapAccept[:,1]))")
+plotL(L, T_for_DL, D, M, 1, "M", MΔ)  # Plot all lattice sizes for the same d.    Fifth entry for which d
+plotL(L, T_for_DL, D, Mx, 1, "M_x", MxΔ)
+plotL(L, T_for_DL, D, χ, 1, "Susc", χΔ)
+plotL(L, T_for_DL, D, χx, 1, "Susc_x", χxΔ)
+plotL(L, T_for_DL, D, χy, 1, "Susc_y", χyΔ)
+plotL(L, T_for_DL, D, χz, 1, "Susc_z", χzΔ)
+plotL(L, T_for_DL, D, E, 1, "E", EΔ)
+plotL(L, T_for_DL, D, C, 12, "C", CΔ2)
+println("80 swap : $(round.(mean(SwapAccept[:,1]); digits=2))")
 plot(T[2:end],diff(E[1,:,1]))
 
-plotd(L, T_for_d, d, χ, "Susc", χΔ,5)   # Plot all the d for a given lattice size (last number for lattice size : L[#], the bigger one by default)
-# plotd(L, T_for_d, d, C, "C", CΔ, 3)   # with error propag from ΔE, smaller error bars
-plotd(L, T_for_d, d, C, "C", CΔ2, 5)
-plotd(L, T_for_d, d, E, "E", EΔ)
-plotd(L, T_for_d, d, M, "M", MΔ)
+plotd(L, T_for_DL, D, χ, "Susc", χΔ)   # Plot all the d for a given lattice size (last number for lattice size : L[#], the bigger one by default)
+# plotd(L, T_for_DL, D, C, "C", CΔ, 3)   # with error propag from ΔE, smaller error bars
+plotd(L, T_for_DL, D, C, "C", CΔ2)
+plotd(L, T_for_DL, D, E, "E", EΔ, 1)
+plotd(L, T_for_DL, D, M, "M", MΔ)
 
 
-α, σα, γ, σγ = zeros(nd), zeros(nd), zeros(nd), zeros(nd)
-for i=1:nd
-    α[i], σα[i] = crit(L, T, C[:,:,i])#, "Capacity")
-    γ[i], σγ[i] = crit(L, T, χ[:,:,i])#, "Susceptibility")
-end
-println(α, "\n", σα, "\n\n", γ, "\n", σγ)
-
+# α, σα, γ, σγ = zeros(nD), zeros(nD), zeros(nD), zeros(nD)
+# for i=1:nD
+#     α[i], σα[i] = crit(L, T, C[:,:,i])#, "Capacity")
+#     γ[i], σγ[i] = crit(L, T, χ[:,:,i])#, "Susceptibility")
+# end
+# println(α, "\n", σα, "\n\n", γ, "\n", σγ)
 
 
 
 ξ, σξ = critlength(T, Corr[1,:,1], 1.0, true)           # third entry for the wanted temperature, fourth to plot or not, fifth component to "true" to get exponent of the algebraic decay instead of correlation length
-Plot_Max_ξ(d, T_for_d, Corr[1,:,:])
+Plot_Max_ξ(L, D, T_for_DL, Corr, 5) # bad for now as it always tries to fit an exponential, but below Tc, this is a power law
 
-# CorrTimePlot(AllLattices, T_for_d, d, 3, L, 2, false)   # Works only when lattices have been saved in the simulation process, doesn't by default.   Fourth element for which d, sixth for which L
+# CorrTimePlot(AllLattices, T_for_DL, D, 3, L, 2, false)   # Works only when lattices have been saved in the simulation process, doesn't by default.   Fourth element for which d, sixth for which L
 
 histogram([x for cell in SwapAccept for x in cell])
 
 
+crit(L, T_for_DL[(L[1], D[1])], C[:,:,1])
 
-crit(L, T_for_d[d[1]], C[:,:,1])
+interpmax(T, C[2,:,1])
 
-interpmax(2, T, C[:,:,1])
-
-Plot_Max_C_Χ(d, T_for_d, χ, L, "Susc")
-Plot_Max_C_Χ(d, T_for_d, C, L, "C")
-
-Plot_Max_ξ(d, T_for_d, Corr[end,:,:], false) # bad for now as it always tries to fit an exponential, but below Tc, this is a power law
+Tmax_χ, χmax, χfitln, χfitpower = Plot_Max_C_Χ(D, T_for_DL, χ, L, "Susc")
+Tmax_C, Cmax, Cfitln, Cfitpower = Plot_Max_C_Χ(D, T_for_DL, C, L, "C")
 
 a = CritLength(Corr[5,20,13], L[5])
 
-
+for i in [1, Int((length(D)+1)/2), length(D)]
+    println("$(D[i]) χ\tln: $(χfitln[i])\tpower (p2*x^p1), then error: $(χfitpower[i])")
+end
+for i in [1, Int((length(D)+1)/2), length(D)]
+    println("$(D[i]) C\tln: $(Cfitln[i])\tpower (p2*x^p1), then error: $(Cfitpower[i])")
+end
 
 # error bar on Plot_Max_C_Χ
-# fit corrlength
-# check litterature XY susc shape
+# fit corrlength (see where critical length diverges)
+
+E0=load("Data/$(L)_$N/70_0.55_-1.0.jld2")[:"Energies"]
+# length(E0)
+# rstar(E0[1:22500],E0[22501:45000],E0[45001:67500],E0[67501:end])
+chn = Chains(E0, ["my param"])
+rhat(chn)

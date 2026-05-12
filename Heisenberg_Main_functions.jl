@@ -299,7 +299,7 @@ function MHStep(step::Int, rep::Replica, L::Int, D::Float32, PBC::Bool, rng::Abs
     return rep
 end
 
-function MH_parallel_tempering(L::Int, N::Int, T::Vector{Float32}, burn::Int, AllLattices::Vector{Int}, D::Float32, Save::Bool=false, SaveLattices::Bool=false, Skip::Int=10, swap::Int=80)     # Sampler
+function MH_parallel_tempering(L::Int, N::Int, T::Vector{Float32}, burn::Int, AllLattices::Vector{Int}, D::Float32, PBC::Bool, Save::Bool=false, SaveLattices::Bool=false, Skip::Int=10, swap::Int=80)     # Sampler
     nT = length(T)
     Lattices = Array{Array{SVector{2,Float32},2}}(undef, nT, div(2000, Skip)-!(N%swap==0)*Skip)       # To save the last lattices, 
     Replicas = Vector{Replica}(undef, nT)
@@ -353,7 +353,7 @@ function MH_parallel_tempering(L::Int, N::Int, T::Vector{Float32}, burn::Int, Al
                 @save "Data/$(AllLattices)_$N/$(L)_$(T[n])_$D.jld2" Energies=Energies[n,:] Mx=Mag[n,:,1] My=Mag[n,:,2] Mz=Mag[n,:,3] corr=corr[n] accept
             end
         end
-        @save "Data/$(AllLattices)_$N/swap_$(L)_$D.jld2" SwapAccept
+        @save "Data/$(AllLattices)_$N/swap_$(L)_$(D)_$(T[1]).jld2" SwapAccept
     end
     for n=1:nT; println("$L \t $D \t $(T[n]) \t $(round.(Replicas[n].Acceptance ./ Replicas[n].Try; digits=3)) \t and Magz2 : $(round(Mag_z2(getindex.(Replicas[n].Lattice, 2), L); digits=3)) \t $(Replicas[n].Cluster)"); end
     return Energies[1,end]
