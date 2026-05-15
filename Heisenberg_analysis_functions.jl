@@ -47,13 +47,13 @@ function Errorpropagation(v::Vector{Any}, Δ::Float32) # propagation of error fo
 end
 
 function plotL(L::Vector{Int64}, T_for_DL::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D::Vector{Float32}, x::Array{Float32, 3}, d::Int64, ytitle::String="", error=[], save::Bool=false)   # read data from a file and plot it
-    p=plot()
+    p=Plots.plot()
     if typeof(x) == Matrix{Any}     # For Correlation length
         for t=1:max(round(Int, length(T_for_DL[(L[1], D[d])])/8),1):length(T_for_DL[(L[1], D[d])])
-            plot!(collect(1:Int(L[end]/2-1)), x[end,:][t], label="$(T[t])",legend=:topright) # yet not update to work
+            Plots.plot!(collect(1:Int(L[end]/2-1)), x[end,:][t], label="$(T[t])",legend=:topright) # yet not update to work
         end
-        title!(p, "Correlation (L=$(L[end])) as a function of distance")
-        xlabel!(p, "Distance (site)")
+        Plots.title!(p, "Correlation (L=$(L[end])) as a function of distance")
+        Plots.xlabel!(p, "Distance (site)")
     else
         if error != []  # if there are error bars
             # if ytitle=="C"; lim=(max(0, minimum(x[:,:,d])),maximum(x[:,3:end,d])+maximum(error[:,3:end,d]))
@@ -63,29 +63,29 @@ function plotL(L::Vector{Int64}, T_for_DL::Dict{Tuple{Int64, Float32}, Vector{Fl
             for l in eachindex(L)
                 T = T_for_DL[(L[l], D[d])]
                 endT = length(T)
-                plot!(T, x[l, 1:endT,d], yerr = Vector(error[l,1:endT,d]), markerstrokecolor=:auto, label="$(L[l])", ylims = lim)
+                Plots.plot!(T, x[l, 1:endT,d], yerr = Vector(error[l,1:endT,d]), markerstrokecolor=:auto, label="$(L[l])", ylims = lim)
             end
         else            # if there are no error bars
             for l in eachindex(L)
                 T = T_for_DL[(L[l], D[d])]
                 endT = length(T)
-                plot!(T, x[l, 1:endT,d], label="$(L[l])", ylims=(max(0, minimum(x[:,1:endT,i])),maximum(x[:,1:endT,i])))
+                Plots.plot!(T, x[l, 1:endT,d], label="$(L[l])", ylims=(max(0, minimum(x[:,1:endT,i])),maximum(x[:,1:endT,i])))
             end
         end
-        title!(p, ytitle*" as a function of T with D = $(D[d])")
-        xlabel!(p, "Temperature")
+        Plots.title!(p, ytitle*" as a function of T with D = $(D[d])")
+        Plots.xlabel!(p, "Temperature")
     end
-    ylabel!(p, ytitle)
+    Plots.ylabel!(p, ytitle)
     if save ==true
-        savefig("Plot/"*ytitle*".pdf")
+        Plots.savefig("Plot/"*ytitle*".pdf")
     end
     # println("size vect: ", size(x))
     # println("endT: ", endT)
     display(p)
 end
 
-function plotd(L::Vector{Int64}, T_for_DL::Dict{Tuple{Int64, Float32}, Vector{Float32}}, d::Vector{Float32}, x::Array{Float32, 3}, ytitle::String="", error=[], l::Int64=length(x[:,1,1]), save::Bool=false)   # read data from a file and plot it
-    p=plot()
+function plotd(L::Vector{Int64}, T_for_DL::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D::Vector{Float32}, x::Array{Float32, 3}, ytitle::String="", error=[], l::Int64=length(x[:,1,1]), save::Bool=false)   # read data from a file and plot it
+    p=Plots.plot()
     pal = cgrad([RGB(.4,.6,1), RGB(0,0,.5), RGB(0,0,0), RGB(.6,0,0), RGB(1,.6,.6)], [0., .4999, .5, .5001, 1.], categorical = false)
     if error != [] 
         if ytitle=="C"; lim=(max(0, minimum(x[l,:,:])),maximum(x[l,3:end,:])+maximum(error[l,3:end,:]))
@@ -97,7 +97,7 @@ function plotd(L::Vector{Int64}, T_for_DL::Dict{Tuple{Int64, Float32}, Vector{Fl
             n = PlotColord(D[d], D[1], D[end])
             T = T_for_DL[(L[l], D[d])]
             endT = length(T)
-            plot!(T, x[l, 1:endT, d].-rescaleE, yerr = Vector(error[l, 1:endT, d]), label="$(D[d])", ylims=lim, seriescolor = pal[n], linecolor = pal[n], markercolor = pal[n], markerstrokecolor = pal[n], ecolor = pal[n])
+            Plots.plot!(T, x[l, 1:endT, d].-rescaleE, yerr = Vector(error[l, 1:endT, d]), label="$(D[d])", ylims=lim, seriescolor = pal[n], linecolor = pal[n], markercolor = pal[n], markerstrokecolor = pal[n], ecolor = pal[n])
         end
     else
         if ytitle=="C"; lim=(max(0, minimum(x[l,:,:])),maximum(x[l,3:end,:]))
@@ -108,13 +108,13 @@ function plotd(L::Vector{Int64}, T_for_DL::Dict{Tuple{Int64, Float32}, Vector{Fl
             n = PlotColord(D[d], D[1], D[end])
             T = T_for_DL[(L[l], D[d])]
             endT = length(T)
-            plot!(T, x[l, 1:endT, d].-rescaleE, label="$(D[d])", seriescolor = pal[n])
+            Plots.plot!(T, x[l, 1:endT, d].-rescaleE, label="$(D[d])", seriescolor = pal[n])
         end
     end
-    title!(p, ytitle*" as a function of T for $(L[l])x$(L[l]) lattices")
-    xlabel!(p, "Temperature")
-    ylabel!(p, ytitle)
-    if save; savefig("Plot/"*ytitle*".pdf"); end
+    Plots.title!(p, ytitle*" as a function of T for $(L[l])x$(L[l]) lattices")
+    Plots.xlabel!(p, "Temperature")
+    Plots.ylabel!(p, ytitle)
+    if save; Plots.savefig("Plot/"*ytitle*".pdf"); end
     display(p)
 end
 
@@ -149,11 +149,11 @@ function crit(L::Vector{Int64}, T::Vector{Float32}, y::Array{Float32,2}, title::
     m, p = coef(fit)
     σm, σp = stderror(fit)
     if title != ""
-        a = plot()
-        plot!(a, log.(L), log.(first.(ymax)), seriestype=:scatter)
-        plot!(a, log.(L), m*log.(L) .+p)
-        xlabel!(a, "Ln(Lattice length)")
-        ylabel!(a, "Ln(max("*title*"))")
+        a = Plots.plot()
+        Plots.plot!(a, log.(L), log.(first.(ymax)), seriestype=:scatter)
+        Plots.plot!(a, log.(L), m*log.(L) .+p)
+        Plots.xlabel!(a, "Ln(Lattice length)")
+        Plots.ylabel!(a, "Ln(max("*title*"))")
         display(a)
     end
     return m, σm
@@ -172,11 +172,11 @@ function critlength(T::Vector{Float32}, data::Vector, t::Real, PLOT::Bool=true, 
     a=plot()
     plot!(a, log.(x)*ln + !ln*x, log.(data[1:n]), seriestype=:scatter, label="data")
     plot!(a, log.(x)*ln + !ln*x, m*(log.(x)*ln + !ln*x) .+p, label="fit")
-    ylabel!(a, "Ln(Correlation)")
-    if ln == true; xlabel!(a, "Ln(Distance)"); ξ=σξ=0
-    else; xlabel!(a, "Distance"); ξ =-1/m; σξ = σ[1]/m^2
+    Plots.ylabel!(a, "Ln(Correlation)")
+    if ln == true; Plots.xlabel!(a, "Ln(Distance)"); ξ=σξ=0
+    else; Plots.xlabel!(a, "Distance"); ξ =-1/m; σξ = σ[1]/m^2
     end
-    title!("Correlation vs distance at T = $(T[closestT])")
+    Plots.title!("Correlation vs distance at T = $(T[closestT])")
     if PLOT==true;    display(a);   end
     return m*ln + !ln*ξ, σ[1]*ln+!ln*σξ
 end
@@ -185,8 +185,8 @@ function CritLength(corr::Vector, L::Int64)
     model(x, p) = CorrelationFunction(L, x, p)
     xdata = Int.(collect(1:L/2-1))
     fit = curve_fit(model, xdata, corr, [3.1, 3.1])    # [..,..] random guess
-    p=plot(xdata, corr, label="data")
-    plot!(xdata, CorrelationFunction(L, xdata, coef(fit)), label="fit")
+    p=Plots.plot(xdata, corr, label="data")
+    Plots.plot!(xdata, CorrelationFunction(L, xdata, coef(fit)), label="fit")
     display(p)
     return coef(fit), stderror(fit)
 end
@@ -224,62 +224,79 @@ function MeanCorrTime(Lattices::Vector{Array{Float32, 3}})
 end
 
 function CorrTimePlot(AllLattices::Array{Vector{Array{Float32, 3}},3}, T_for_DL::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D::Vector{Float32}, d::Int64, L::Vector{Int64}, l::Int64, save::Bool=false)
-    p=plot()
+    p=Plots.plot()
     pal = cgrad([:lightblue, :green, :red])
     for i in eachindex(T_for_DL[(L[l], D[d])])
         MCT = MeanCorrTime(AllLattices[l,i,d])
         x = T_for_DL[(L[l], D[d])][i]/T_for_DL[(L[l], D[d])][end]
-        plot!(collect(1:length(MCT))*10, MCT, label="$(T_for_DL[(L[l], D[d])][i])", seriescolor = pal[x], linecolor = pal[x], markercolor = pal[x], markerstrokecolor = pal[x], ecolor = pal[x])
+        Plots.plot!(collect(1:length(MCT))*10, MCT, label="$(T_for_DL[(L[l], D[d])][i])", seriescolor = pal[x], linecolor = pal[x], markercolor = pal[x], markerstrokecolor = pal[x], ecolor = pal[x])
     end
-    title!(p, "Correlation time, L=$(L[l]), D=$(D[d])")
+    Plots.title!(p, "Correlation time, L=$(L[l]), D=$(D[d])")
     if save ==true
-        savefig("Plot/CorrelationTime$(D[d]).pdf")
+        Plots.savefig("Plot/CorrelationTime$(D[d]).pdf")
     end
     display(p)
 end
 
 function Plot_Max_C_Χ(D::Vector{Float32}, T_for_DL::Dict{Tuple{Int64, Float32}, Vector{Float32}}, Y::Array{Float32, 3}, L::Vector{Int64}, title::String="C/χ", save::Bool=false)
     pal = cgrad([RGB(.4,.6,1), RGB(0,0,.5), RGB(0,0,0), RGB(.6,0,0), RGB(1,.6,.6)], [0., .4999, .5, .5001, 1.], categorical = false)
-    p=plot() # xmax & T of xmax vs D
+    p=Plots.plot() # xmax & T of xmax vs D
     xmax, Tmax = Array{Float64}(undef, length(D), length(L)), Array{Float64}(undef, length(D), length(L))
     for l in eachindex(L)
         for d in eachindex(D)
             xmax[d,l], Tmax[d,l] = interpmax(T_for_DL[(L[l], D[d])], filter(!iszero, Y[l,:,d]))
         end
-        plot!(D, Tmax[:,l], seriestype=:scatter, label="$(L[l])")
+        Plots.plot!(D, Tmax[:,l], seriestype=:scatter, label="$(L[l])")
     end
-    title!("Tpic of $title vs D")
-    ylabel!("Temperature of the maximum of $title")
-    xlabel!("⬅ Ising                              Value of D                              XY ➡")
-    if save; savefig("Plot/Tpic_$title.pdf"); end
+    Plots.title!("Tpic of $title vs D")
+    Plots.ylabel!("Temperature of the maximum of $title")
+    Plots.xlabel!("⬅ Ising                              Value of D                              XY ➡")
+    if save; Plots.savefig("Plot/Tpic_$title.pdf"); end
     display(p)
-    p=plot()
+    p=Plots.plot()
     for l in eachindex(L)
-        plot!(D, xmax[:,l], seriestype=:scatter, label="$(L[l])")
+        Plots.plot!(D, xmax[:,l], seriestype=:scatter, label="$(L[l])")
     end
-    title!("$title max vs D")
-    ylabel!("Mximum of $title")
-    xlabel!("⬅ Ising                              Value of D                              XY ➡")
-    if save; savefig("Plot/$(title)_max.pdf"); end
+    Plots.title!("$title max vs D")
+    Plots.ylabel!("Mximum of $title")
+    Plots.xlabel!("⬅ Ising                              Value of D                              XY ➡")
+    if save; Plots.savefig("Plot/$(title)_max.pdf"); end
     display(p)
     
-    p=plot() # xmax & T of xmax vs L
+    fit_Tc = []
+    fit_ln = []
+    fit_power = []
+    x = 8:0.1:70
+    n=zeros(length(D))
+    for d in eachindex(D)
+        n[d] = PlotColord(D[d], D[1], D[end])
+    end
+    p1=Plots.plot() # xmax & T of xmax vs L
     for d in eachindex(D)
         for l in eachindex(L)
             xmax[d,l], Tmax[d,l] = interpmax(T_for_DL[(L[l], D[d])], filter(!iszero, Y[l,:,d]))
         end
-        n = PlotColord(D[d], D[1], D[end])
-        plot!(L, Tmax[d,:], seriestype=:scatter, label="$(D[d])", seriescolor=pal[n])
+        if title=="Susc"
+            fitTc =  curve_fit(Tc_distance, L, Tmax[d,:], [-1.1, .9, .9])
+            push!(fit_Tc, (round.(coef(fitTc);digits=3), round.(stderror(fitTc);digits=3)))
+            Plots.plot!(x, coef(fitTc)[3]*x.^coef(fitTc)[1].+coef(fitTc)[2], seriescolor=pal[n[d]], label="")
+        end
+        Plots.plot!(L, Tmax[d,:], seriestype=:scatter, seriescolor=pal[n[d]], label="")
     end
-    title!("Tpic of $title vs L")
-    ylabel!("Temperature of the maximum of $title")
-    xlabel!("Lattice length")
-    if save; savefig("Plot/TpicvsL_$title.pdf"); end
+    Plots.title!("Tpic of $title vs L")
+    Plots.ylabel!("Temperature of the maximum of $title")
+    Plots.xlabel!("Lattice length")
+
+    fig = Figure(size = (62, 330))          # Make the wanted colorbar requires other packages. The colorbar is then saved and combined with the plot
+    Colorbar(fig[1, 1]; colormap = pal, colorrange = (D[1], D[end]), ticks = ([D[1], D[1]/2, 0, D[end]/2, D[end]], string.(round.([D[1], D[1]*2^(-10/3), 0, D[end]*2^(-10/3), D[end]]; digits=2))), label = "D value")
+    Colorbar_name = "Colorbar.png"
+    Makie.save(Colorbar_name, fig; px_per_unit = 8)
+    p2 = Plots.plot(load(Colorbar_name), framestyle = :none, axis = nothing)
+
+    p=Plots.plot(p1, p2, layout= @layout [a{.88w} b{.12w}])
+    if save; Plots.savefig("Plot/TpicvsL_$title.pdf"); end
     display(p)
-    p=plot()
-    fit_ln = []
-    fit_power = []
-    x = 8:0.1:70
+    p=Plots.plot()
     for d in eachindex(D)
         fitln =  curve_fit(ln_fit, L, xmax[d,:], [1.1])
         fitpower = curve_fit(power_fit, L, xmax[d,:], [.8, 1.1])
@@ -287,16 +304,16 @@ function Plot_Max_C_Χ(D::Vector{Float32}, T_for_DL::Dict{Tuple{Int64, Float32},
         push!(fit_power, (round.(coef(fitpower);digits=3), round.(stderror(fitpower);digits=3)))
 
         n = PlotColord(D[d], D[1], D[end])
-        plot!(L, xmax[d,:], seriestype=:scatter, label="$(D[d])", seriescolor=pal[n])
-        plot!(x, coef(fitpower)[2]*x.^coef(fitpower)[1], label="$(D[d])", seriescolor=pal[n])
+        Plots.plot!(L, xmax[d,:], seriestype=:scatter, label="", z=n, seriescolor=pal[n])
+        Plots.plot!(x, coef(fitpower)[2]*x.^coef(fitpower)[1], label="", z=n, seriescolor=pal[n])
     end
-    title!("$title max vs L")
-    ylabel!("Mximum of $title")
-    xlabel!("Lattice length")
-    if save; savefig("Plot/$(title)_max_vsL.pdf"); end
+    Plots.plot!(p, colorbar=true, colorbar_title="D Value")
+    Plots.title!("$title max vs L")
+    Plots.ylabel!("Mximum of $title")
+    Plots.xlabel!("Lattice length")
+    if save; Plots.savefig("Plot/$(title)_max_vsL.pdf"); end
     display(p)
-
-    return Tmax, xmax, fit_ln, fit_power
+    return Tmax, xmax, fit_ln, fit_power, fit_Tc
 end
 
 function Plot_Max_ξ(L::Vector{Int64}, D::Vector{Float32}, T_for_DL::Dict{Tuple{Int64, Float32}, Vector{Float32}}, Corr::Array{Vector{Float32}, 3}, l::Int64, ln::Bool=false)
@@ -310,20 +327,25 @@ function Plot_Max_ξ(L::Vector{Int64}, D::Vector{Float32}, T_for_DL::Dict{Tuple{
         println(critic)
         Tmax[i] = round(T_for_DL[(L[l], D[i])][argmax(critic)];digits=3)
     end
-    p=plot(D, Tmax)
-    xlabel!("⬅ Ising                              Value of D                              XY ➡")
-    ylabel!("Temperature of the maximum of ξ")
+    p=Plots.plot(D, Tmax)
+    Plots.xlabel!("⬅ Ising                              Value of D                              XY ➡")
+    Plots.ylabel!("Temperature of the maximum of ξ")
     display(p)
     return Tmax
 end
 
-function ln_fit(x::Vector, p::Vector{Float64})
+function ln_fit(x::Vector{Int64}, p::Vector{Float64})
     return p[1]*log.(x)
 end
 
-function power_fit(x::Vector, p::Vector{Float64})
-    return p[2]*x.^p[1]
+function power_fit(L::Vector{Int64}, p::Vector{Float64})
+    return p[2]*L.^p[1]
 end
+
+function Tc_distance(L::Vector{Int64}, p::Vector{Float64})
+    return p[3]*L.^p[1].+p[2]
+end
+
 # α : specific heat                     Ising : 0       XY : NOP Essential singularity
 # β : zero field mag                    Ising : 1/8     XY : NOP No magnetization (To have a nonzero 𝑀, the correlation function must approach a constant at large distance. But in the 2D XY model: For 𝑇>𝑇BKT: correlations decay exponentially. For 𝑇<𝑇BKT: correlations decay as a power law)
 # γ : zero field isothermal suscxx      Ising : 7/4     XY : NOP Essential divergence

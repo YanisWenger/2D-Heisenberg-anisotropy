@@ -1,4 +1,4 @@
-using Distributions, Plots, ColorSchemes, Colors, CSV, DataFrames, Dierckx, LsqFit, JLD2, Glob, Primes, MCMCChains   # To have basic math (mean), To plot, colors for lattices, write/read csv (CSV & DataFrames), interpolate, save data in compact file, glob to read files and name files, To get divisors of a number
+using Distributions, Plots, Makie, CairoMakie, ColorSchemes, Colors, CSV, DataFrames, Dierckx, LsqFit, JLD2, Glob, Primes, MCMCChains   # To have basic math (mean), To plot, To plot, To plot, colors for lattices, write/read csv (CSV & DataFrames), interpolate, save data in compact file, glob to read files and name files, To get divisors of a number, To check convergence
 include("./Heisenberg_analysis_functions.jl")
 
 
@@ -103,23 +103,24 @@ crit(L, T_for_DL[(L[1], D[1])], C[:,:,1])
 
 interpmax(T, C[2,:,1])
 
-Tmax_χ, χmax, χfitln, χfitpower = Plot_Max_C_Χ(D, T_for_DL, χ, L, "Susc")
-Tmax_C, Cmax, Cfitln, Cfitpower = Plot_Max_C_Χ(D, T_for_DL, C, L, "C")
+Tmax_χ, χmax, χfitln, χfitpower, χfit_Tc = Plot_Max_C_Χ(D, T_for_DL, χ, L, "Susc")
+Tmax_C, Cmax, Cfitln, Cfitpower, Cfit_Tc = Plot_Max_C_Χ(D, T_for_DL, C, L, "C")
 
 a = CritLength(Corr[5,20,13], L[5])
 
 for i in [1, Int((length(D)+1)/2), length(D)]
-    println("$(D[i]) χ\tln: $(χfitln[i])\tpower (p2*x^p1), then error: $(χfitpower[i])")
+    println("$(D[i]) χ\tln: $(χfitln[i])\tpower (p2*x^p1), then error: $(χfitpower[i])\t Tmax-Tc propto L^ $(χfit_Tc[i][1][1]) ± $(χfit_Tc[i][2][1])\t Tc = $(χfit_Tc[i][1][2]) ± $(χfit_Tc[i][2][2])")
 end
 for i in [1, Int((length(D)+1)/2), length(D)]
-    println("$(D[i]) C\tln: $(Cfitln[i])\tpower (p2*x^p1), then error: $(Cfitpower[i])")
+    println("$(D[i]) C\tln: $(Cfitln[i])\tpower (p2*x^p1), then error: $(Cfitpower[i])\t Tmax-Tc propto L^ $(Cfit_Tc[i][1][1]) ± $(Cfit_Tc[i][2][1])\t Tc = $(Cfit_Tc[i][1][2]) ± $(Cfit_Tc[i][2][2])")
 end
+
+
+
+E0=load("Data/$(L)_$N/70_0.55_-1.0.jld2")[:"Energies"]
+chn = Chains(E0, ["my param"])
+rhat(chn)
+
 
 # error bar on Plot_Max_C_Χ
 # fit corrlength (see where critical length diverges)
-
-E0=load("Data/$(L)_$N/70_0.55_-1.0.jld2")[:"Energies"]
-# length(E0)
-# rstar(E0[1:22500],E0[22501:45000],E0[45001:67500],E0[67501:end])
-chn = Chains(E0, ["my param"])
-rhat(chn)
