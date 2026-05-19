@@ -86,7 +86,7 @@ end
 
 function plotd(L::Vector{Int64}, T_for_DL::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D::Vector{Float32}, x::Array{Float32, 3}, ytitle::String="", error=[], l::Int64=length(x[:,1,1]), save::Bool=false)   # read data from a file and plot it
     p=Plots.plot()
-    pal = cgrad([RGB(.4,.6,1), RGB(0,0,.5), RGB(0,0,0), RGB(.6,0,0), RGB(1,.6,.6)], [0., .4999, .5, .5001, 1.], categorical = false)
+    pal = cgrad([RGB(.8,.9,1), RGB(0,0,.5), RGB(0,0,0), RGB(.6,0,0), RGB(1,.75,.75)], [0., .4999, .5, .5001, 1.], categorical = false)
     if error != [] 
         if ytitle=="C"; lim=(max(0, minimum(x[l,:,:])),maximum(x[l,3:end,:])+maximum(error[l,3:end,:]))
         else; lim = :auto
@@ -134,8 +134,24 @@ function interpmax(T::Vector{Float32}, y::Vector{Float32}) # interpolate and fin
     return (findmax(yinterp)[1], xinterp[findmax(yinterp)[2]])
 end
 
-function linear(x::Vector, p::Vector{Float64}) # linear function
-    return p[1]*x .+ p[2]
+function interpmax_with_error(T::Vector{Float32}, y::Vector{Float32}, y_err::Vector{Float32}; n_bootstrap=1000) # bootstrap resampling
+    xinterp = collect(T[1]:.002:T[end])
+    max_values = Float32[]
+    max_positions = Float32[]
+    
+    for i in 1:n_bootstrap
+        y_perturbed = y .+ randn(length(y)) .* y_err # Perturb y values according to their uncertainties
+        
+        try # Fit spline and find max
+            yinterp = Spline1D(T, y_perturbed, k=3)(xinterp)
+            idx = argmax(yinterp)
+            push!(max_values, yinterp[idx])
+            push!(max_positions, xinterp[idx])
+        catch
+            continue # Skip failed fits (rare)
+        end
+    end    
+    return (median(max_values), median(max_positions), std(max_values), std(max_positions))
 end
 
 function crit(L::Vector{Int64}, T::Vector{Float32}, y::Array{Float32,2}, title::String="") # calculate α & γ, plot if title is a non-empty string
@@ -144,7 +160,7 @@ function crit(L::Vector{Int64}, T::Vector{Float32}, y::Array{Float32,2}, title::
         ymax[l] = interpmax(T, y[l,:])
     end
     println(ymax)
-    fit =  curve_fit(linear, log.(L), log.(first.(ymax)), if (y=="c"); [.1,-.7]; elseif (y=="susc"); [2.,-4.]; else [.9,-.9] end)
+    fit =  curve_fit(linear_fit, log.(L), log.(first.(ymax)), if (y=="c"); [.1,-.7]; elseif (y=="susc"); [2.,-4.]; else [.9,-.9] end)
     println(#=typeof(fit), "\n",=# fit)
     m, p = coef(fit)
     σm, σp = stderror(fit)
@@ -166,7 +182,7 @@ function critlength(T::Vector{Float32}, data::Vector, t::Real, PLOT::Bool=true, 
     if typeof(negativ) == Nothing; n = length(data); else; n=negativ-1; end
     println(n)
     x=collect(1:n)
-    fit =  curve_fit(linear, log.(x)*ln + !ln*x, log.(data[1:n]), [-.09,9.])
+    fit =  curve_fit(linear_fit, log.(x)*ln + !ln*x, log.(data[1:n]), [-.09,9.])
     m,p = coef(fit); σ = stderror(fit)
 
     a=plot()
@@ -238,15 +254,15 @@ function CorrTimePlot(AllLattices::Array{Vector{Array{Float32, 3}},3}, T_for_DL:
     display(p)
 end
 
-function Plot_Max_C_Χ(D::Vector{Float32}, T_for_DL::Dict{Tuple{Int64, Float32}, Vector{Float32}}, Y::Array{Float32, 3}, L::Vector{Int64}, title::String="C/χ", save::Bool=false)
-    pal = cgrad([RGB(.4,.6,1), RGB(0,0,.5), RGB(0,0,0), RGB(.6,0,0), RGB(1,.6,.6)], [0., .4999, .5, .5001, 1.], categorical = false)
+function Plot_Max_C_Χ(D::Vector{Float32}, T_for_DL::Dict{Tuple{Int64, Float32}, Vector{Float32}}, Y::Array{Float32, 3}, Yerr::Array{Float32, 3}, L::Vector{Int64}, title::String="C/χ", save::Bool=false)
+    pal = cgrad([RGB(.8,.9,1), RGB(0,0,.5), RGB(0,0,0), RGB(.6,0,0), RGB(1,.75,.75)], [0., .4999, .5, .5001, 1.], categorical = false)
     p=Plots.plot() # xmax & T of xmax vs D
-    xmax, Tmax = Array{Float64}(undef, length(D), length(L)), Array{Float64}(undef, length(D), length(L))
+    xmax, Tmax, xmaxerr, Tmaxerr = Array{Float64}(undef, length(D), length(L)), Array{Float64}(undef, length(D), length(L)), Array{Float64}(undef, length(D), length(L)), Array{Float64}(undef, length(D), length(L))
     for l in eachindex(L)
         for d in eachindex(D)
-            xmax[d,l], Tmax[d,l] = interpmax(T_for_DL[(L[l], D[d])], filter(!iszero, Y[l,:,d]))
+            xmax[d,l], Tmax[d,l], xmaxerr[d,l], Tmaxerr[d,l] = interpmax_with_error(T_for_DL[(L[l], D[d])], filter(!iszero, Y[l,:,d]), filter(!iszero, Yerr[l,:,d]))
         end
-        Plots.plot!(D, Tmax[:,l], seriestype=:scatter, label="$(L[l])")
+        Plots.plot!(D, Tmax[:,l], seriestype=:scatter, label="$(L[l])", yerr=Tmaxerr[:,l])
     end
     Plots.title!("Tpic of $title vs D")
     Plots.ylabel!("Temperature of the maximum of $title")
@@ -255,10 +271,10 @@ function Plot_Max_C_Χ(D::Vector{Float32}, T_for_DL::Dict{Tuple{Int64, Float32},
     display(p)
     p=Plots.plot()
     for l in eachindex(L)
-        Plots.plot!(D, xmax[:,l], seriestype=:scatter, label="$(L[l])")
+        Plots.plot!(D, xmax[:,l], seriestype=:scatter, label="$(L[l])", yerr=xmaxerr[:,l])
     end
     Plots.title!("$title max vs D")
-    Plots.ylabel!("Mximum of $title")
+    Plots.ylabel!("Maximum of $title")
     Plots.xlabel!("⬅ Ising                              Value of D                              XY ➡")
     if save; Plots.savefig("Plot/$(title)_max.pdf"); end
     display(p)
@@ -274,14 +290,14 @@ function Plot_Max_C_Χ(D::Vector{Float32}, T_for_DL::Dict{Tuple{Int64, Float32},
     p1=Plots.plot() # xmax & T of xmax vs L
     for d in eachindex(D)
         for l in eachindex(L)
-            xmax[d,l], Tmax[d,l] = interpmax(T_for_DL[(L[l], D[d])], filter(!iszero, Y[l,:,d]))
+            xmax[d,l], Tmax[d,l], xmaxerr[d,l], Tmaxerr[d,l] = interpmax_with_error(T_for_DL[(L[l], D[d])], filter(!iszero, Y[l,:,d]), filter(!iszero, Yerr[l,:,d]))
         end
         if title=="Susc"
-            fitTc =  curve_fit(Tc_distance, L, Tmax[d,:], [-1.1, .9, .9])
+            fitTc =  curve_fit(Tc_distance_fit, L, Tmax[d,:], [-1.1, .9, .9])
             push!(fit_Tc, (round.(coef(fitTc);digits=3), round.(stderror(fitTc);digits=3)))
             Plots.plot!(x, coef(fitTc)[3]*x.^coef(fitTc)[1].+coef(fitTc)[2], seriescolor=pal[n[d]], label="")
         end
-        Plots.plot!(L, Tmax[d,:], seriestype=:scatter, seriescolor=pal[n[d]], label="")
+        Plots.plot!(L, Tmax[d,:], seriestype=:scatter, seriescolor=pal[n[d]], label="", yerr=Tmaxerr[d,:])
     end
     Plots.title!("Tpic of $title vs L")
     Plots.ylabel!("Temperature of the maximum of $title")
@@ -296,21 +312,28 @@ function Plot_Max_C_Χ(D::Vector{Float32}, T_for_DL::Dict{Tuple{Int64, Float32},
     p=Plots.plot(p1, p2, layout= @layout [a{.88w} b{.12w}])
     if save; Plots.savefig("Plot/TpicvsL_$title.pdf"); end
     display(p)
-    p=Plots.plot()
+    p1=Plots.plot()
     for d in eachindex(D)
-        fitln =  curve_fit(ln_fit, L, xmax[d,:], [1.1])
+        fitln =  curve_fit(ln_fit, L, xmax[d,:], [1.1, 1.8])
         fitpower = curve_fit(power_fit, L, xmax[d,:], [.8, 1.1])
         push!(fit_ln, (round(coef(fitln)[1];digits=3), round(stderror(fitln)[1];digits=3)))
         push!(fit_power, (round.(coef(fitpower);digits=3), round.(stderror(fitpower);digits=3)))
 
         n = PlotColord(D[d], D[1], D[end])
-        Plots.plot!(L, xmax[d,:], seriestype=:scatter, label="", z=n, seriescolor=pal[n])
-        Plots.plot!(x, coef(fitpower)[2]*x.^coef(fitpower)[1], label="", z=n, seriescolor=pal[n])
+        Plots.plot!(L, xmax[d,:], seriestype=:scatter, label="", z=n, seriescolor=pal[n], yerr=xmaxerr[d,:])
+        if title=="C"
+            Plots.plot!(x, coef(fitln)[1]*log.(x) .+coef(fitln)[2], label="", z=n, seriescolor=pal[n])
+        else
+            Plots.plot!(x, coef(fitpower)[2]*x.^coef(fitpower)[1], label="", z=n, seriescolor=pal[n])
+        end
     end
-    Plots.plot!(p, colorbar=true, colorbar_title="D Value")
-    Plots.title!("$title max vs L")
-    Plots.ylabel!("Mximum of $title")
+    Plots.plot!(p1, colorbar=true, colorbar_title="D Value")
+    Plots.title!("$(title)_max vs L")
+    Plots.ylabel!("Maximum of $title")
     Plots.xlabel!("Lattice length")
+
+    p2 = Plots.plot(load(Colorbar_name), framestyle = :none, axis = nothing)
+    p=Plots.plot(p1, p2, layout= @layout [a{.88w} b{.12w}])
     if save; Plots.savefig("Plot/$(title)_max_vsL.pdf"); end
     display(p)
     return Tmax, xmax, fit_ln, fit_power, fit_Tc
@@ -334,15 +357,19 @@ function Plot_Max_ξ(L::Vector{Int64}, D::Vector{Float32}, T_for_DL::Dict{Tuple{
     return Tmax
 end
 
+function linear_fit(x::Vector, p::Vector{Float64}) # linear function
+    return p[1]*x .+ p[2]
+end
+
 function ln_fit(x::Vector{Int64}, p::Vector{Float64})
-    return p[1]*log.(x)
+    return p[1]*log.(x) .+ p[2]
 end
 
 function power_fit(L::Vector{Int64}, p::Vector{Float64})
     return p[2]*L.^p[1]
 end
 
-function Tc_distance(L::Vector{Int64}, p::Vector{Float64})
+function Tc_distance_fit(L::Vector{Int64}, p::Vector{Float64})
     return p[3]*L.^p[1].+p[2]
 end
 
