@@ -12,7 +12,7 @@ const SaveLattices = false            # To save the (199 by default) last lattic
 
 println("  --  $N sweeps  --  ")
 starttime = time()
-if !isdir("Data/$(L)_$N")
+if !isdir("Data/$(L)_$N")   # create the folder if it does not exist
     mkpath("Data/$(L)_$N")
 end
 for d in D
@@ -21,7 +21,7 @@ for d in D
     end
 end
 
-t = round(Int, time()-starttime)
+t = round(Int, time()-starttime)    # record and save time
 if Save == true
     open("Data/$(L)_$N/elapsed_time.txt", "a") do file
         write(file, "$t\n$D\n$T\n\n")

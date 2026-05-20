@@ -18,7 +18,7 @@ const T, D, T_for_DL = Get_T_DL(N, L, folder_name_end)   # Obtain Temperature an
 Nmeasurement = length(load("Data/$(L)_$N$(folder_name_end)/$(L[1])_$(T_for_DL[(L[1],D[1])][1])_$(D[1]).jld2")[:"Energies"])
 Nbin = div(Nmeasurement, Nperbin)
 
-nL, nT, nD  =   length(L), length(T), length(D) # number of different lattices, temperatures and anisotropic term
+nL, nT, nD  =   length(L), length(T), length(D) # number of different lattice sizes, temperatures and anisotropic term
 E, EΔ       =   zeros(Float32, nL, nT, nD), zeros(Float32, nL, nT, nD)
 M, MΔ       =   zeros(Float32, nL, nT, nD), zeros(Float32, nL, nT, nD)
 Mx, My, Mz, MxΔ, MyΔ, MzΔ = zeros(Float32, nL, nT, nD), zeros(Float32, nL, nT, nD), zeros(Float32, nL, nT, nD), zeros(Float32, nL, nT, nD), zeros(Float32, nL, nT, nD), zeros(Float32, nL, nT, nD)
@@ -74,11 +74,11 @@ plotL(L, T_for_DL, D, C, 12, "C", CΔ2)
 println("80 swap : $(round.(mean(SwapAccept[:,1]); digits=2))")
 plot(T[2:end],diff(E[1,:,1]))
 
-plotd(L, T_for_DL, D, χ, "Susc", χΔ)   # Plot all the d for a given lattice size (last number for lattice size : L[#], the bigger one by default)
-# plotd(L, T_for_DL, D, C, "C", CΔ, 3)   # with error propag from ΔE, smaller error bars
-plotd(L, T_for_DL, D, C, "C", CΔ2)
-plotd(L, T_for_DL, D, E, "E", EΔ, 1)
-plotd(L, T_for_DL, D, M, "M", MΔ)
+plotD(L, T_for_DL, D, χ, "Susc", χΔ)   # Plot all the d for a given lattice size (last number for lattice size : L[#], the bigger one by default)
+# plotD(L, T_for_DL, D, C, "C", CΔ, 3)   # with error propag from ΔE, smaller error bars
+plotD(L, T_for_DL, D, C, "C", CΔ2)
+plotD(L, T_for_DL, D, E, "E", EΔ, 1)
+plotD(L, T_for_DL, D, M, "M", MΔ)
 
 
 # α, σα, γ, σγ = zeros(nD), zeros(nD), zeros(nD), zeros(nD)
@@ -102,7 +102,7 @@ crit(L, T_for_DL[(L[1], D[1])], C[:,:,1])
 
 interpmax(T, C[2,:,1])
 
-Tmax_χ, χmax, χfitln, χfitpower, χfit_Tc = Plot_Max_C_Χ(D, T_for_DL, χ, χΔ, L, "Susc")
+Tmax_χ, χmax, χfitln, χfitpower, χfit_Tc = Plot_Max_C_Χ(D, T_for_DL, χ, χΔ, L, "Susc") # Plot and fit the max of C or χ
 Tmax_C, Cmax, Cfitln, Cfitpower, Cfit_Tc = Plot_Max_C_Χ(D, T_for_DL, C, CΔ, L, "C")
 
 a = CritLength(Corr[5,20,13], L[5])

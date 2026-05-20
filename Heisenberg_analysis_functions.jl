@@ -1,4 +1,4 @@
-function Get_T_DL(N::Int64, L::Vector{Int64}, End::String="")  # for the first lattice size (supposing they all have the same T and d), gives which T have each d
+function Get_T_DL(N::Int64, L::Vector{Int64}, End::String="")  # for each lattice size gives which T have each d
     T_for_DL = Dict{Tuple{Int64, Float32}, Vector{Float32}}()
     all_D = []
     all_T = []
@@ -26,7 +26,7 @@ function Get_T_DL(N::Int64, L::Vector{Int64}, End::String="")  # for the first l
     return Float32.(all_T), Float32.(all_D), T_for_DL
 end
 
-function Binor(arr::Vector{Float32}, Nbin::Int64, Nperbin::Int64) # take them Nbin by Nbin and average each the bins.
+function Binor(arr::Vector{Float32}, Nbin::Int64, Nperbin::Int64) # take measured quantities (E, M) Nbin by Nbin, average each the bins and get the error bars
     Bins=[]
     for i=1:Nbin
         push!(Bins, mean(arr[((i-1)*Nperbin)+1:i*Nperbin]))
@@ -34,7 +34,7 @@ function Binor(arr::Vector{Float32}, Nbin::Int64, Nperbin::Int64) # take them Nb
     return Bins
 end
 
-function Binor2nd(arr::Vector{Float32}, Nbin::Int64, Nperbin::Int64, T::Float32, L::Int64) # errorbar for c and Χ
+function Binor2nd(arr::Vector{Float32}, Nbin::Int64, Nperbin::Int64, T::Float32, L::Int64) # error bars for c and Χ
     Bins=[]
     for i=1:Nbin
         push!(Bins, (mean(arr[(i-1)*Nperbin+1:i*Nperbin].^2) - mean(arr[(i-1)*Nperbin+1:i*Nperbin])^2)/T*L^2)
@@ -46,7 +46,7 @@ function Errorpropagation(v::Vector{Any}, Δ::Float32) # propagation of error fo
     return sqrt(sum((v .- mean(v)).^2)/length(v))*2*Δ
 end
 
-function plotL(L::Vector{Int64}, T_for_DL::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D::Vector{Float32}, x::Array{Float32, 3}, d::Int64, ytitle::String="", error=[], save::Bool=false)   # read data from a file and plot it
+function plotL(L::Vector{Int64}, T_for_DL::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D::Vector{Float32}, x::Array{Float32, 3}, d::Int64, ytitle::String="", error=[], save::Bool=false)   # read data from a file and plot it vs L
     p=Plots.plot()
     if typeof(x) == Matrix{Any}     # For Correlation length
         for t=1:max(round(Int, length(T_for_DL[(L[1], D[d])])/8),1):length(T_for_DL[(L[1], D[d])])
@@ -84,28 +84,28 @@ function plotL(L::Vector{Int64}, T_for_DL::Dict{Tuple{Int64, Float32}, Vector{Fl
     display(p)
 end
 
-function plotd(L::Vector{Int64}, T_for_DL::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D::Vector{Float32}, x::Array{Float32, 3}, ytitle::String="", error=[], l::Int64=length(x[:,1,1]), save::Bool=false)   # read data from a file and plot it
+function plotD(L::Vector{Int64}, T_for_DL::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D::Vector{Float32}, x::Array{Float32, 3}, ytitle::String="", error=[], l::Int64=length(x[:,1,1]), save::Bool=false)   # read data from a file and plot it vs D
     p=Plots.plot()
     pal = cgrad([RGB(.8,.9,1), RGB(0,0,.5), RGB(0,0,0), RGB(.6,0,0), RGB(1,.75,.75)], [0., .4999, .5, .5001, 1.], categorical = false)
     if error != [] 
-        if ytitle=="C"; lim=(max(0, minimum(x[l,:,:])),maximum(x[l,3:end,:])+maximum(error[l,3:end,:]))
-        else; lim = :auto
-        end
+        # if ytitle=="C"; lim=(max(0, minimum(x[l,:,:])),maximum(x[l,3:end,:])+maximum(error[l,3:end,:]))
+        #=else;=# lim = :auto
+        # end
         for d in eachindex(D)
             rescaleE=0          # To rescale the Energy (only when y = Energy)
             if ytitle=="E" && D[d]<0; rescaleE = D[d]; end
-            n = PlotColord(D[d], D[1], D[end])
+            n = PlotcolorD(D[d], D[1], D[end])
             T = T_for_DL[(L[l], D[d])]
             endT = length(T)
             Plots.plot!(T, x[l, 1:endT, d].-rescaleE, yerr = Vector(error[l, 1:endT, d]), label="$(D[d])", ylims=lim, seriescolor = pal[n], linecolor = pal[n], markercolor = pal[n], markerstrokecolor = pal[n], ecolor = pal[n])
         end
     else
-        if ytitle=="C"; lim=(max(0, minimum(x[l,:,:])),maximum(x[l,3:end,:]))
-        end
+        # if ytitle=="C"; lim=(max(0, minimum(x[l,:,:])),maximum(x[l,3:end,:]))
+        # end
         for d in eachindex(D)
             rescaleE=0
             if ytitle=="E" && D[d]<0; rescaleE = D[d]; end
-            n = PlotColord(D[d], D[1], D[end])
+            n = PlotcolorD(D[d], D[1], D[end])
             T = T_for_DL[(L[l], D[d])]
             endT = length(T)
             Plots.plot!(T, x[l, 1:endT, d].-rescaleE, label="$(D[d])", seriescolor = pal[n])
@@ -118,7 +118,7 @@ function plotd(L::Vector{Int64}, T_for_DL::Dict{Tuple{Int64, Float32}, Vector{Fl
     display(p)
 end
 
-function PlotColord(x::Float32, dmin::Float32, dmax::Float32)
+function PlotcolorD(x::Float32, dmin::Float32, dmax::Float32)   # associate a D value with a color
     if x < 0
         return .5 - .5* (x / dmin)^.3
     elseif x > 0
@@ -134,7 +134,7 @@ function interpmax(T::Vector{Float32}, y::Vector{Float32}) # interpolate and fin
     return (findmax(yinterp)[1], xinterp[findmax(yinterp)[2]])
 end
 
-function interpmax_with_error(T::Vector{Float32}, y::Vector{Float32}, y_err::Vector{Float32}; n_bootstrap=1000) # bootstrap resampling
+function interpmax_with_error(T::Vector{Float32}, y::Vector{Float32}, y_err::Vector{Float32}; n_bootstrap=1000) # interpolate and find the Tmax (for all Lattice size) then bootstrap resampling to get error bars
     xinterp = collect(T[1]:.002:T[end])
     max_values = Float32[]
     max_positions = Float32[]
@@ -219,11 +219,11 @@ function G(x::Vector{Int64}, Nk::Int64=100)
     return y/Nk
 end
 
-function Correlation(spin1::Vector, spin2::Vector)  # Correlation between two spins
+function Correlation(spin1::Vector, spin2::Vector)  # Correlation between two spins (i.e. dot product)
     return sin(spin1[2])*sin(spin2[2])*cos(spin1[1]-spin2[1]) + cos(spin1[2])*cos(spin2[2])  
 end
 
-function MeanCorrTime(Lattices::Vector{Array{Float32, 3}})
+function MeanCorrTime(Lattices::Vector{Array{Float32, 3}})  # calculate the mean correlation time
     L = length(Lattices[1][:,1,1])
     n = length(Lattices)
     Corr = zeros(n-1)
@@ -285,7 +285,7 @@ function Plot_Max_C_Χ(D::Vector{Float32}, T_for_DL::Dict{Tuple{Int64, Float32},
     x = 8:0.1:70
     n=zeros(length(D))
     for d in eachindex(D)
-        n[d] = PlotColord(D[d], D[1], D[end])
+        n[d] = PlotcolorD(D[d], D[1], D[end])
     end
     p1=Plots.plot() # xmax & T of xmax vs L
     for d in eachindex(D)
@@ -319,7 +319,7 @@ function Plot_Max_C_Χ(D::Vector{Float32}, T_for_DL::Dict{Tuple{Int64, Float32},
         push!(fit_ln, (round(coef(fitln)[1];digits=3), round(stderror(fitln)[1];digits=3)))
         push!(fit_power, (round.(coef(fitpower);digits=3), round.(stderror(fitpower);digits=3)))
 
-        n = PlotColord(D[d], D[1], D[end])
+        n = PlotcolorD(D[d], D[1], D[end])
         Plots.plot!(L, xmax[d,:], seriestype=:scatter, label="", z=n, seriescolor=pal[n], yerr=xmaxerr[d,:])
         if title=="C"
             Plots.plot!(x, coef(fitln)[1]*log.(x) .+coef(fitln)[2], label="", z=n, seriescolor=pal[n])
@@ -361,15 +361,15 @@ function linear_fit(x::Vector, p::Vector{Float64}) # linear function
     return p[1]*x .+ p[2]
 end
 
-function ln_fit(x::Vector{Int64}, p::Vector{Float64})
+function ln_fit(x::Vector{Int64}, p::Vector{Float64})       # a * ln(x) + b
     return p[1]*log.(x) .+ p[2]
 end
 
-function power_fit(L::Vector{Int64}, p::Vector{Float64})
+function power_fit(L::Vector{Int64}, p::Vector{Float64})    # a * L ^ b
     return p[2]*L.^p[1]
 end
 
-function Tc_distance_fit(L::Vector{Int64}, p::Vector{Float64})
+function Tc_distance_fit(L::Vector{Int64}, p::Vector{Float64})  # a * L ^ b + c
     return p[3]*L.^p[1].+p[2]
 end
 
