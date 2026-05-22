@@ -75,7 +75,7 @@ end
         Δ += D * (cos(Lattice[i,j][2])^2 - cos(newspin[2])^2)
     else
         if Whichflip==1
-            Δ = EnergyDiff(Lattice[i,j], newspin, Lattice[i==1 ? L : i-1,j], Lattice[i,j==1 ? L : j-1], Lattice[i==L ? 1 : i+1,j], Lattice[i,j==L ? 1 : j+1],D)      # previously: Δ = Correlation(newspin,Lattice[:,mod(i-2,L)+1,j]) - Correlation(Lattice[:,i,j],Lattice[:,mod(i-2,L)+1,j])   +   Correlation(newspin,Lattice[:,mod(i,L)+1,j]) - Correlation(Lattice[:,i,j],Lattice[:,mod(i,L)+1,j])   +   Correlation(newspin,Lattice[:,i,mod(j-2,L)+1]) - Correlation(Lattice[:,i,j],Lattice[:,i,mod(j-2,L)+1])   +   Correlation(newspin,Lattice[:,i,mod(j,L)+1]) - Correlation(Lattice[:,i,j],Lattice[:,i,mod(j,L)+1])
+            Δ = EnergyDiff(Lattice[i,j], newspin, Lattice[i==1 ? L : i-1,j], Lattice[i,j==1 ? L : j-1], Lattice[i==L ? 1 : i+1,j], Lattice[i,j==L ? 1 : j+1],D)
         elseif Whichflip==3
             Δ = EnergyDiffPhi(Lattice[i,j], newspin[1], Lattice[i==1 ? L : i-1,j], Lattice[i,j==1 ? L : j-1], Lattice[i==L ? 1 : i+1,j], Lattice[i,j==L ? 1 : j+1])
         else # if Ising or XY-theta flip, as on both cases phi stay the same
@@ -272,9 +272,9 @@ function Swap(Replicas::Vector{Replica}, i::Int, rng_swap::AbstractRNG, βdiff_i
 end
 
 function MHStep(step::Int, rep::Replica, L::Int, D::Float32, PBC::Bool, rng::AbstractRNG)   # ful MH step: i.e. lattice sweep or Wolff algorithm, and (potentially) adjust the three σ for the three gaussian proposal to be closer to the optimal acceptance rate
-    Mz2 = Mag_z2(getindex.(rep.Lattice, 2), L)
+    Mz2 = Mag_z2(getindex.(rep.Lattice, 2), L)  # quantifies how much spins are aligned along z
     IsingProba_Mz2 = IsingProba(Mz2)
-    if mod(step,100)==0 && IsingProba_Mz2 > 0 && IsingProba_Mz2 > rand(rng) # the second condition is mathematically useless because of the third, but it doesn't generate random number if proba =0
+    if mod(step,100)==0 && IsingProba_Mz2 > 0 && IsingProba_Mz2 > rand(rng) # the second condition is mathematically useless because of the third, but it is faster like so as it doesn't generate random number if Probability is 0
         rep.Lattice = SVector{2,Float32}.(getindex.(rep.Lattice, 1),    IsingClusterUpdate(getindex.(rep.Lattice, 2), L, rep.T, rng))    # Wolff algorithm
         rep.Cluster += 1
     else
@@ -427,5 +427,3 @@ end # just a choice, there is no perfect one
 #   @inline     directly put the code of the function where the function is called, instead of really calling it    for single line function, no need "return" inside it
 #   @fastmath   allows to reorder operation to save a bit of time (sometimes less precise because of floating point handling)
 #   @inbounds   don't check if wanted component exist example     x=vector[n]     Doesn't check that the n-th component even exists, just trust the process
-# Lattices=Array{Int64, 2}(undef, 1, 2)
-# !isassigned(Lattices,i)

@@ -176,18 +176,19 @@ function crit(L::Vector{Int64}, T::Vector{Float32}, y::Array{Float32,2}, title::
 end
 
 function critlength(T::Vector{Float32}, data::Vector, t::Real, PLOT::Bool=true, ln::Bool=false) # Calculate critical exp or correlation length (by default)
-    closestT = argmin(abs.(T .- t)); println(T[closestT])
-    data=data[closestT]
-    negativ = findfirst(x -> x < 4e-4, data)
-    if typeof(negativ) == Nothing; n = length(data); else; n=negativ-1; end
+    closestT = argmin(abs.(T .- t))     # Compute the temperature closest to the requested one
+    data=data[closestT] 
+    negativ = findfirst(x -> x < 4e-4, data)    # don't take in account when the correlation is below than 4e-4 (0.07)
+    if typeof(negativ) == Nothing; n = length(data)
+    else; n=negativ-1; end
     println(n)
     x=collect(1:n)
     fit =  curve_fit(linear_fit, log.(x)*ln + !ln*x, log.(data[1:n]), [-.09,9.])
     m,p = coef(fit); σ = stderror(fit)
 
-    a=plot()
-    plot!(a, log.(x)*ln + !ln*x, log.(data[1:n]), seriestype=:scatter, label="data")
-    plot!(a, log.(x)*ln + !ln*x, m*(log.(x)*ln + !ln*x) .+p, label="fit")
+    a=Plots.plot()
+    Plots.plot!(a, log.(x)*ln + !ln*x, log.(data[1:n]), seriestype=:scatter, label="data")
+    Plots.plot!(a, log.(x)*ln + !ln*x, m*(log.(x)*ln + !ln*x) .+p, label="fit")
     Plots.ylabel!(a, "Ln(Correlation)")
     if ln == true; Plots.xlabel!(a, "Ln(Distance)"); ξ=σξ=0
     else; Plots.xlabel!(a, "Distance"); ξ =-1/m; σξ = σ[1]/m^2
@@ -339,21 +340,29 @@ function Plot_Max_C_Χ(D::Vector{Float32}, T_for_DL::Dict{Tuple{Int64, Float32},
     return Tmax, xmax, fit_ln, fit_power, fit_Tc
 end
 
-function Plot_Max_ξ(L::Vector{Int64}, D::Vector{Float32}, T_for_DL::Dict{Tuple{Int64, Float32}, Vector{Float32}}, Corr::Array{Vector{Float32}, 3}, l::Int64, ln::Bool=false)
+function Plot_Max_ξ(L::Vector{Int64}, D::Vector{Float32}, T_for_DL::Dict{Tuple{Int64, Float32}, Vector{Float32}}, Corr::Array{Vector{Float32}, 3}, l::Int64, ln::Bool=false, only_one_d::Int64=0)
     Corr = Corr[l,:,:]
-    Tmax = zeros(length(D))
-    for i in eachindex(D)
-        critic = zeros(length(T_for_DL[(L[l], D[i])]))
-        for j in eachindex(T_for_DL[(L[l], D[i])])
-            critic[j], a = critlength(T_for_DL[(L[l], D[i])], Corr[:,i], T_for_DL[(L[l], D[i])][j], true, ln)
+    if only_one_d == 0
+        Tmax = zeros(length(D))
+        for d in eachindex(D)
+            critic = zeros(length(T_for_DL[(L[l], D[d])]))
+            for j in eachindex(T_for_DL[(L[l], D[d])])
+                critic[j], a = critlength(T_for_DL[(L[l], D[d])], Corr[:,d], T_for_DL[(L[l], D[d])][j], true, ln)
+            end
+            println(critic)
+            Tmax[d] = round(T_for_DL[(L[l], D[d])][argmax(critic)];digits=3)
         end
-        println(critic)
-        Tmax[i] = round(T_for_DL[(L[l], D[i])][argmax(critic)];digits=3)
+        p=Plots.plot(D, Tmax)
+        Plots.xlabel!("⬅ Ising                              Value of D                              XY ➡")
+        Plots.ylabel!("Temperature of the maximum of ξ")
+        display(p)
+    else    # To be able to use this function for one D value at a time
+        d = only_one_d
+        critic = zeros(length(T_for_DL[(L[l], D[d])]))
+        for j in eachindex(T_for_DL[(L[l], D[d])])
+            critic[j], a = critlength(T_for_DL[(L[l], D[d])], Corr[:,d], T_for_DL[(L[l], D[d])][j], true, ln)
+        end
     end
-    p=Plots.plot(D, Tmax)
-    Plots.xlabel!("⬅ Ising                              Value of D                              XY ➡")
-    Plots.ylabel!("Temperature of the maximum of ξ")
-    display(p)
     return Tmax
 end
 
@@ -380,3 +389,79 @@ end
 # ν : corr length                       Ising : 1       XY : NOP 𝜉 diverges exponentially
 
 # continuous symmetries cannot be spontaneously broken in 2D
+
+
+
+
+
+
+#    To analyse single D simulation, have to be suppressed at some point
+
+function Plot_Max_C_Χ_singleD(D::Vector{Float32}, T_for_DL::Dict{Tuple{Int64, Float32}, Vector{Float32}}, Y::Array{Float32, 3}, Yerr::Array{Float32, 3}, L::Vector{Int64}, title::String="C/χ", save::Bool=false)
+    p=Plots.plot() # xmax & T of xmax vs D
+    xmax, Tmax, xmaxerr, Tmaxerr = Array{Float64}(undef, length(D), length(L)), Array{Float64}(undef, length(D), length(L)), Array{Float64}(undef, length(D), length(L)), Array{Float64}(undef, length(D), length(L))
+    for l in eachindex(L)
+        xmax[1,l], Tmax[1,l], xmaxerr[1,l], Tmaxerr[1,l] = interpmax_with_error(T_for_DL[(L[l], D[1])], Y[l,:,1], filter(!iszero, Yerr[l,:,1]))
+        Plots.plot!(D, Tmax[:,l], seriestype=:scatter, label="$(L[l])", yerr=Tmaxerr[:,l])
+    end
+    Plots.title!("Tpic of $title vs D")
+    Plots.ylabel!("Temperature of the maximum of $title")
+    Plots.xlabel!("⬅ Ising                              Value of D                              XY ➡")
+    if save; Plots.savefig("Plot/Tpic_$title.pdf"); end
+    display(p)
+    p=Plots.plot()
+    for l in eachindex(L)
+        Plots.plot!(D, xmax[:,l], seriestype=:scatter, label="$(L[l])", yerr=xmaxerr[:,l])
+    end
+    Plots.title!("$title max vs D")
+    Plots.ylabel!("Maximum of $title")
+    Plots.xlabel!("⬅ Ising                              Value of D                              XY ➡")
+    if save; Plots.savefig("Plot/$(title)_max.pdf"); end
+    display(p)
+    
+    fit_Tc = []
+    fit_ln = []
+    fit_power = []
+    x = L[1]:0.1:L[end]
+    n=zeros(length(D))
+    p1=Plots.plot() # xmax & T of xmax vs L
+    for d in eachindex(D)
+        for l in eachindex(L)
+            xmax[d,l], Tmax[d,l], xmaxerr[d,l], Tmaxerr[d,l] = interpmax_with_error(T_for_DL[(L[l], D[d])], Y[l,:,d], filter(!iszero, Yerr[l,:,d]))
+        end
+        if title!=""
+            fitTc =  curve_fit(Tc_distance_fit, L, Tmax[d,:], [-1.1, .9, .9])
+            push!(fit_Tc, (round.(coef(fitTc);digits=3), round.(stderror(fitTc);digits=3)))
+            Plots.plot!(x, coef(fitTc)[3]*x.^coef(fitTc)[1].+coef(fitTc)[2], label="")
+            println("power: $(coef(fitTc)[1])\tTc: $(coef(fitTc)[2])")
+        end
+        Plots.plot!(L, Tmax[d,:], seriestype=:scatter, label="", yerr=Tmaxerr[d,:])
+    end
+    Plots.title!("Tpic of $title vs L")
+    Plots.ylabel!("Temperature of the maximum of $title")
+    Plots.xlabel!("Lattice length")
+    if save; Plots.savefig("Plot/TpicvsL_$title.pdf"); end
+    display(p1)
+    p1=Plots.plot()
+    for d in eachindex(D)
+        fitln =  curve_fit(ln_fit, L, xmax[d,:], [1.1, 1.8])
+        fitpower = curve_fit(power_fit, L, xmax[d,:], [.8, 1.1])
+        push!(fit_ln, (round(coef(fitln)[1];digits=3), round(stderror(fitln)[1];digits=3)))
+        push!(fit_power, (round.(coef(fitpower);digits=3), round.(stderror(fitpower);digits=3)))
+
+        Plots.plot!(L, xmax[d,:], seriestype=:scatter, label="", z=n, yerr=xmaxerr[d,:])
+        if title=="C"
+            Plots.plot!(x, coef(fitln)[1]*log.(x) .+coef(fitln)[2], label="", z=n)
+        else
+            Plots.plot!(x, coef(fitpower)[2]*x.^coef(fitpower)[1], label="", z=n)
+        end
+    end
+    Plots.plot!(p1, colorbar=true, colorbar_title="D Value")
+    Plots.title!("$(title)_max vs L")
+    Plots.ylabel!("Maximum of $title")
+    Plots.xlabel!("Lattice length")
+
+    if save; Plots.savefig("Plot/$(title)_max_vsL.pdf"); end
+    display(p1)
+    return Tmax, xmax, fit_ln, fit_power, fit_Tc
+end

@@ -6,13 +6,15 @@ include("./Heisenberg_analysis_functions.jl")
 
 
 const N    = 1000_000     # Number of lattice sweeps
-const L    = [8,12,20,32,50,70]  # Lattices size
+const L    = [8,12,20,32,50,70,100]  # Lattices size
 const Nperbin = 100       # Number of measurements per bins
 const PBC  = true         # Periodic Boundary Conditions
-folder_name_end=""
+folder_name_end="_Ising"    # if the folder as a name like [8, 12, 20]_1000000_Ising, the name end is _Ising. By default the folders are created without name end
 
 
 # ----- Get data ----- #
+
+# all quantities are intensive (E and M are saved normalized, C and χ are then computed directly normalized)
 
 const T, D, T_for_DL = Get_T_DL(N, L, folder_name_end)   # Obtain Temperature and anisotropic term in Data/$(L)_$N i.e. Data/[8, 12, 20]_1000000
 Nmeasurement = length(load("Data/$(L)_$N$(folder_name_end)/$(L[1])_$(T_for_DL[(L[1],D[1])][1])_$(D[1]).jld2")[:"Energies"])
@@ -35,26 +37,26 @@ for l in eachindex(L)
         for t in eachindex(T_for_DL[(L[l], D[d])])
             Data = load("Data/$(L)_$N$(folder_name_end)/$(L[l])_$(T_for_DL[(L[l], D[d])][t])_$(D[d]).jld2")
             En = Data[:"Energies"]
-            mx = Data[:"Mx"]
-            my = Data[:"My"]
-            mz = Data[:"Mz"]
-            Ma = sqrt.(mx.^2+my.^2+mz.^2)
+            # mx = Data[:"Mx"]
+            # my = Data[:"My"]
+            # mz = Data[:"Mz"]
+            Ma = Data[:"Mag"]#sqrt.(mx.^2+my.^2+mz.^2)
             E[l,t,d], EΔ[l,t,d] = mean(En),                             std(Binor(En, Nbin, Nperbin))/sqrt(Nbin)
             M[l,t,d], MΔ[l,t,d] = mean(Ma),                             std(Binor(Ma, Nbin, Nperbin))/sqrt(Nbin)
-            Mx[l,t,d], MxΔ[l,t,d] = mean(mx),                           std(Binor(mx, Nbin, Nperbin))/sqrt(Nbin)
-            My[l,t,d], MyΔ[l,t,d] = mean(my),                           std(Binor(my, Nbin, Nperbin))/sqrt(Nbin)
-            Mz[l,t,d], MzΔ[l,t,d] = mean(mz),                           std(Binor(mz, Nbin, Nperbin))/sqrt(Nbin)
+            # Mx[l,t,d], MxΔ[l,t,d] = mean(mx),                           std(Binor(mx, Nbin, Nperbin))/sqrt(Nbin)
+            # My[l,t,d], MyΔ[l,t,d] = mean(my),                           std(Binor(my, Nbin, Nperbin))/sqrt(Nbin)
+            # Mz[l,t,d], MzΔ[l,t,d] = mean(mz),                           std(Binor(mz, Nbin, Nperbin))/sqrt(Nbin)
             χ[l,t,d], χΔ[l,t,d] = (mean(Ma.^2)-M[l,t,d]^2)/T[t]*L[l]^2, std(Binor2nd(Ma, Nbin, Nperbin, T[t], L[l]))/sqrt(Nbin)
-            χx[l,t,d], χxΔ[l,t,d] = (mean(mx.^2)-Mx[l,t,d]^2)/T[t]*L[l]^2, std(Binor2nd(mx, Nbin, Nperbin, T[t], L[l]))/sqrt(Nbin)
-            χy[l,t,d], χyΔ[l,t,d] = (mean(my.^2)-My[l,t,d]^2)/T[t]*L[l]^2, std(Binor2nd(my, Nbin, Nperbin, T[t], L[l]))/sqrt(Nbin)
-            χz[l,t,d], χzΔ[l,t,d] = (mean(mz.^2)-Mz[l,t,d]^2)/T[t]*L[l]^2, std(Binor2nd(mz, Nbin, Nperbin, T[t], L[l]))/sqrt(Nbin)
+            # χx[l,t,d], χxΔ[l,t,d] = (mean(mx.^2)-Mx[l,t,d]^2)/T[t]*L[l]^2, std(Binor2nd(mx, Nbin, Nperbin, T[t], L[l]))/sqrt(Nbin)
+            # χy[l,t,d], χyΔ[l,t,d] = (mean(my.^2)-My[l,t,d]^2)/T[t]*L[l]^2, std(Binor2nd(my, Nbin, Nperbin, T[t], L[l]))/sqrt(Nbin)
+            # χz[l,t,d], χzΔ[l,t,d] = (mean(mz.^2)-Mz[l,t,d]^2)/T[t]*L[l]^2, std(Binor2nd(mz, Nbin, Nperbin, T[t], L[l]))/sqrt(Nbin)
             C[l,t,d], CΔ[l,t,d], CΔ2[l,t,d] = (mean(En.^2)-E[l,t,d]^2)/T[t]^2*L[l]^2, Errorpropagation(Binor(En, Nbin, Nperbin), EΔ[l,t,d])/T[t]^2*L[l]^2,      std(Binor2nd(En, Nbin, Nperbin, T[t], L[l]))/T[t]/sqrt(Nbin)
             Corr[l,t,d]         = Data[:"corr"]
             Acceptance[:,l,t,d] = Data[:"accept"]
             # AllLattices[l,t,d] = Data[:"Lattices"]
             # println("N = ", L[l], "\tT = ", T[t], " \td = ", D[d], "\t E = ", round(E[l,t,d];digits=3), " ± ", round(EΔ[l,t,d];digits=5), "\tM = ", round(M[l,t,d];digits=3), " ± ", round(MΔ[l,t,d];digits=5), " \t χ = ", round(χ[l,t,d];digits=3), " ± ", round(χΔ[l,t,d];digits=3), "\tC = ", round(C[l,t,d];digits=3), " ± ", round(CΔ[l,t,d];digits=4), "\taccept = ", round.(Acceptance[:,l,t,d];digits=3))
         end
-        SwapAccept[l,d] = load("Data/$(L)_$N$(folder_name_end)/swap_$(L[l])_$(D[d])_$(T[1]).jld2")[:"SwapAccept"]
+        # SwapAccept[l,d] = load("Data/$(L)_$N$(folder_name_end)/swap_$(L[l])_$(D[d])_$(T[1]).jld2")[:"SwapAccept"]
     end
     print(L[l], "     ")
 end
@@ -91,7 +93,7 @@ plotD(L, T_for_DL, D, M, "M", MΔ)
 
 
 ξ, σξ = critlength(T, Corr[1,:,1], 1.0, true)           # third entry for the wanted temperature, fourth to plot or not, fifth component to "true" to get exponent of the algebraic decay instead of correlation length
-Plot_Max_ξ(L, D, T_for_DL, Corr, 5) # bad for now as it always tries to fit an exponential, but below Tc, this is a power law
+Plot_Max_ξ(L, D, T_for_DL, Corr, 7, true) # bad for now as it always tries to fit an exponential, but below Tc, this is a power law
 
 # CorrTimePlot(AllLattices, T_for_DL, D, 3, L, 2, false)   # Works only when lattices have been saved in the simulation process, doesn't by default.   Fourth element for which d, sixth for which L
 
@@ -134,3 +136,4 @@ rhat(chn)
 
 
 # fit corrlength (see where critical length diverges)
+# correlation vs distance is not correlation length
