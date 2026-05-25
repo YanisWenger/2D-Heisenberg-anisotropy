@@ -17,7 +17,7 @@ if !isdir("Data/$(L)_$N")   # create the folder if it does not exist
 end
 for d in D
     for l in L
-        E1_end = MH_parallel_tempering(l, N, T, burn, L, d, Save, SaveLattices)
+        E1_end = MH_parallel_tempering(N, T, L, l, d, burn, PBC, Save, SaveLattices)
     end
 end
 

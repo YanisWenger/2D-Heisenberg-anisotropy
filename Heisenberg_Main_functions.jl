@@ -298,7 +298,7 @@ function MHStep(step::Int, rep::Replica, L::Int, D::Float32, PBC::Bool, rng::Abs
     return rep
 end
 
-function MH_parallel_tempering(L::Int, N::Int, T::Vector{Float32}, burn::Int, AllLattices::Vector{Int}, D::Float32, PBC::Bool, Save::Bool=false, SaveLattices::Bool=false, Skip::Int=10, swap::Int=80)     # Sampler i.e. main function
+function MH_parallel_tempering(N::Int, T::Vector{Float32}, L::Vector{Int}, l::Int, D::Float32, burn::Int, PBC::Bool, Save::Bool=false, SaveLattices::Bool=false, Skip::Int=10, swap::Int=80)     # Sampler i.e. main function
     nT = length(T)
     Lattices = Array{Array{SVector{2,Float32},2}}(undef, nT, div(2000, Skip)-!(N%swap==0)*Skip)       # To save the last lattices, 
     Replicas = Vector{Replica}(undef, nT)
@@ -306,55 +306,55 @@ function MH_parallel_tempering(L::Int, N::Int, T::Vector{Float32}, burn::Int, Al
     seed = rand(1:10000)
     rngs = [Xoshiro(seed+i) for i in 1:nT]
     Threads.@threads for i=1:nT                              # Initialize Replicas
-        lat = Initial_lattice(L, rngs[i])
-        Replicas[i] = Replica(lat, T[i], Energy(lat, L, PBC, D), .25f0, .4f0, .25f0, [0,0,0,0], [0,0,0,0], 0)
+        lat = Initial_lattice(l, rngs[i])
+        Replicas[i] = Replica(lat, T[i], Energy(lat, l, PBC, D), .25f0, .4f0, .25f0, [0,0,0,0], [0,0,0,0], 0)
     end
     Nswap = div(N, swap)                            # number of lattice swap's try 
     println("$N, $Nswap, $swap, $(Nswap*swap)")
     Nmeasurement = div(N - burn, Skip)      # Number of measurement (as some sweeps are not measured to save some time)
     Energies = Array{Float32}(undef, nT, Nmeasurement)
     Mag  = Array{Float32}(undef, nT, Nmeasurement, 3)
-    corr = [zeros(Float32, length(RowCorr(Replicas[1].Lattice, L, PBC))) for _ in 1:nT]
+    corr = [zeros(Float32, length(RowCorr(Replicas[1].Lattice, l, PBC))) for _ in 1:nT]
     SwapAcceptance = zeros(Int, nT-1)
     
     for i=1:Nswap
         Threads.@threads for n=1:nT
             for j=1:swap
                 k = (i-1)*swap+j
-                Replicas[n] = MHStep(k, Replicas[n], L, D, PBC, rngs[n])
+                Replicas[n] = MHStep(k, Replicas[n], l, D, PBC, rngs[n])
                 if k > burn && mod(k, Skip) == 0            # to not measure every lattice sweeps
                     lat = Replicas[n].Lattice
                     m = div(k-burn, Skip)
-                    Energies[n, m] = Energy(lat, L, PBC, D)
-                    Mag[n, m, :] = mag(lat, L)
-                    corr[n] += RowCorr(lat, L, PBC)
+                    Energies[n, m] = Energy(lat, l, PBC, D)
+                    Mag[n, m, :] = mag(lat, l)
+                    corr[n] += RowCorr(lat, l, PBC)
                     if SaveLattices && k > N-2000   # often useful to save a "few" last lattices to compute the correlation time (often not use)
                         kk = div(k+2000-N, Skip)
                         Lattices[n, kk] = lat
                     end
                 end
             end
-            Replicas[n].E = Energy(Replicas[n].Lattice, L, PBC, D)  #   Only need to calculate the energy for storing (above) and for (trying to) swapping lattices
+            Replicas[n].E = Energy(Replicas[n].Lattice, l, PBC, D)  #   Only need to calculate the energy for storing (above) and for (trying to) swapping lattices
         end
         for n=1:nT-1
             SwapAcceptance[n] += Swap(Replicas, n, rngs[1], βdiff[n])
         end
     end
     SwapAccept = SwapAcceptance/Nswap
-    Energies /= !PBC*L*(L-1) + PBC*L^2
+    Energies /= !PBC*l*(l-1) + PBC*l^2
     corr /= Nmeasurement
     if Save==true
         for n=1:nT
             accept = Replicas[n].Acceptance ./ Replicas[n].Try
             if SaveLattices
-                @save "Data/$(AllLattices)_$N/$(L)_$(T[n])_$D.jld2" Energies=Energies[n,:] Mx=Mag[n,:,1] My=Mag[n,:,2] Mz=Mag[n,:,3] corr=corr[n] accept Lattices=Lattices[n,:]
+                @save "Data/$(L)_$N/$(l)_$(T[n])_$D.jld2" Energies=Energies[n,:] Mx=Mag[n,:,1] My=Mag[n,:,2] Mz=Mag[n,:,3] corr=corr[n] accept Lattices=Lattices[n,:]
             else
-                @save "Data/$(AllLattices)_$N/$(L)_$(T[n])_$D.jld2" Energies=Energies[n,:] Mx=Mag[n,:,1] My=Mag[n,:,2] Mz=Mag[n,:,3] corr=corr[n] accept
+                @save "Data/$(L)_$N/$(l)_$(T[n])_$D.jld2" Energies=Energies[n,:] Mx=Mag[n,:,1] My=Mag[n,:,2] Mz=Mag[n,:,3] corr=corr[n] accept
             end
         end
-        @save "Data/$(AllLattices)_$N/swap_$(L)_$(D)_$(T[1]).jld2" SwapAccept
+        @save "Data/$(L)_$N/swap_$(l)_$(D)_$(T[1]).jld2" SwapAccept
     end
-    for n=1:nT; println("$L \t $D \t $(T[n]) \t $(round.(Replicas[n].Acceptance ./ Replicas[n].Try; digits=3)) \t and Magz2 : $(round(Mag_z2(getindex.(Replicas[n].Lattice, 2), L); digits=3)) \t $(Replicas[n].Cluster)"); end
+    for n=1:nT; println("$l \t $D \t $(T[n]) \t $(round.(Replicas[n].Acceptance ./ Replicas[n].Try; digits=3)) \t and Magz2 : $(round(Mag_z2(getindex.(Replicas[n].Lattice, 2), l); digits=3)) \t $(Replicas[n].Cluster)"); end
     return Energies[1,end]
 end
 

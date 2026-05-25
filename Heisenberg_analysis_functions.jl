@@ -294,7 +294,7 @@ function Plot_Max_C_Χ(D::Vector{Float32}, T_for_DL::Dict{Tuple{Int64, Float32},
             xmax[d,l], Tmax[d,l], xmaxerr[d,l], Tmaxerr[d,l] = interpmax_with_error(T_for_DL[(L[l], D[d])], filter(!iszero, Y[l,:,d]), filter(!iszero, Yerr[l,:,d]))
         end
         if title=="Susc"
-            fitTc =  curve_fit(Tc_distance_fit, L, Tmax[d,:], [-1.1, .9, .9])
+            fitTc =  curve_fit(power_fit_plus, L, Tmax[d,:], [-1.1, .9, .9])
             push!(fit_Tc, (round.(coef(fitTc);digits=3), round.(stderror(fitTc);digits=3)))
             Plots.plot!(x, coef(fitTc)[3]*x.^coef(fitTc)[1].+coef(fitTc)[2], seriescolor=pal[n[d]], label="")
         end
@@ -378,7 +378,7 @@ function power_fit(L::Vector{Int64}, p::Vector{Float64})    # a * L ^ b
     return p[2]*L.^p[1]
 end
 
-function Tc_distance_fit(L::Vector{Int64}, p::Vector{Float64})  # a * L ^ b + c
+function power_fit_plus(L::Vector{Int64}, p::Vector{Float64})  # a * L ^ b + c
     return p[3]*L.^p[1].+p[2]
 end
 
@@ -430,7 +430,7 @@ function Plot_Max_C_Χ_singleD(D::Vector{Float32}, T_for_DL::Dict{Tuple{Int64, F
             xmax[d,l], Tmax[d,l], xmaxerr[d,l], Tmaxerr[d,l] = interpmax_with_error(T_for_DL[(L[l], D[d])], Y[l,:,d], filter(!iszero, Yerr[l,:,d]))
         end
         if title!=""
-            fitTc =  curve_fit(Tc_distance_fit, L, Tmax[d,:], [-1.1, .9, .9])
+            fitTc =  curve_fit(power_fit_plus, L, Tmax[d,:], [-1.1, .9, .9])
             push!(fit_Tc, (round.(coef(fitTc);digits=3), round.(stderror(fitTc);digits=3)))
             Plots.plot!(x, coef(fitTc)[3]*x.^coef(fitTc)[1].+coef(fitTc)[2], label="")
             println("power: $(coef(fitTc)[1])\tTc: $(coef(fitTc)[2])")
