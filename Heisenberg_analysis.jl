@@ -1,4 +1,4 @@
-using Distributions, Plots, Makie, CairoMakie, ColorSchemes, Colors, CSV, DataFrames, Dierckx, LsqFit, JLD2, Glob, Primes, MCMCChains #Statistics??   # To have basic math (mean), To plot, To plot, To plot (needed for Makie), colors for lattices, write/read csv (CSV & DataFrames), interpolate, save data in compact file, glob to read files and name files, To get divisors of a number, To check convergence
+using Distributions, Plots, Makie, CairoMakie, ColorSchemes, Colors, CSV, DataFrames, Dierckx, LsqFit, JLD2, Glob, Primes, MCMCChains   # To have basic math (mean), To plot, To plot, To plot (needed for Makie), colors for lattices, write/read csv (CSV & DataFrames), interpolate & fit, save data in compact file, glob to read files and name files, To get divisors of a number, To check convergence
 include("./Heisenberg_analysis_functions.jl")
 
 
@@ -65,6 +65,9 @@ end
 # -----     Plots and analysis     ----- #
 
 
+PlotColors = cgrad([RGB(.8,.9,1), RGB(0,0,.5), RGB(0,0,0), RGB(.6,0,0), RGB(1,.75,.75)], [0., .4999, .5, .5001, 1.], categorical = false) # Color for plots
+colorbar(PlotColors, D) # Need to create the colorbar for some following graphs    
+
 plotL(L, T_for_DL, D, M, 1, "M", MΔ)  # Plot all lattice sizes for the same d.    Fifth entry for which d
 plotL(L, T_for_DL, D, Mx, 1, "M_x", MxΔ)
 plotL(L, T_for_DL, D, χ, 1, "Susc", χΔ)
@@ -72,15 +75,15 @@ plotL(L, T_for_DL, D, χx, 1, "Susc_x", χxΔ)
 plotL(L, T_for_DL, D, χy, 1, "Susc_y", χyΔ)
 plotL(L, T_for_DL, D, χz, 1, "Susc_z", χzΔ)
 plotL(L, T_for_DL, D, E, 1, "E", EΔ)
-plotL(L, T_for_DL, D, C, 12, "C", CΔ2)
+plotL(L, T_for_DL, D, C, 1, "C", CΔ2)
 println("80 swap : $(round.(mean(SwapAccept[:,1]); digits=2))")
 plot(T[2:end],diff(E[1,:,1]))
 
-plotD(L, T_for_DL, D, χ, "Susc", χΔ)   # Plot all the d for a given lattice size (last number for lattice size : L[#], the bigger one by default)
+plotD(PlotColors, L, T_for_DL, D, χ, "Susc", χΔ)   # Plot all the d for a given lattice size (last number for lattice size : L[#], the bigger one by default)
 # plotD(L, T_for_DL, D, C, "C", CΔ, 3)   # with error propag from ΔE, smaller error bars
-plotD(L, T_for_DL, D, C, "C", CΔ2)
-plotD(L, T_for_DL, D, E, "E", EΔ, 1)
-plotD(L, T_for_DL, D, M, "M", MΔ)
+plotD(PlotColors, L, T_for_DL, D, C, "C", CΔ2)
+plotD(PlotColors, L, T_for_DL, D, E, "E", EΔ, 1)
+plotD(PlotColors, L, T_for_DL, D, M, "M", MΔ)
 
 
 # α, σα, γ, σγ = zeros(nD), zeros(nD), zeros(nD), zeros(nD)
@@ -104,8 +107,8 @@ crit(L, T_for_DL[(L[1], D[1])], C[:,:,1])
 
 interpmax(T, C[2,:,1])
 
-Tmax_χ, χmax, χfitln, χfitpower, χfit_Tc = Plot_Max_C_Χ(D, T_for_DL, χ, χΔ, L, "Susc") # Plot and fit the max of C or χ
-Tmax_C, Cmax, Cfitln, Cfitpower, Cfit_Tc = Plot_Max_C_Χ(D, T_for_DL, C, CΔ, L, "C")
+Tmax_χ, χmax, χfitln, χfitpower, χfit_Tc = Plot_Max_C_Χ(PlotColors, D, T_for_DL, χ, χΔ, L, "Susc") # Plot and fit the max of C or χ
+Tmax_C, Cmax, Cfitln, Cfitpower, Cfit_Tc = Plot_Max_C_Χ(PlotColors, D, T_for_DL, C, CΔ, L, "C")
 
 a = CritLength(Corr[5,20,13], L[5])
 
@@ -137,3 +140,32 @@ rhat(chn)
 
 # fit corrlength (see where critical length diverges)
 # correlation vs distance is not correlation length
+# Yeomans 116 (115-118) to rescale C and 
+
+
+for i=1:2:23
+    plotL(L, T_for_DL, D, χ, i, "Susc", χΔ)
+end
+
+
+
+
+for i=1:23
+    println("$i  ",round.(SwapAccept[6,i];digits=3), "\n")
+end
+
+a=6
+println(round.(Tmax_C[:,a] .- Tmax_χ[:,a];digits=3))
+Tmax_C[1,2]
+
+SwapAccept[6,23][10:19]
+
+for d=1:23
+    p=Plots.plot(T_for_DL[L[6],D[d]], C[6,1:length(T_for_DL[L[6],D[d]]),d]/maximum(C[6,:,d]))
+    Plots.plot!(T_for_DL[L[6],D[d]], χ[6,1:length(T_for_DL[L[6],D[d]]),d]/maximum(χ[6,:,d]))
+    display(p)
+end
+
+for i=1:23
+    println("$(D[i]) \t $(round((Tmax_C[i,6]+2*Tmax_χ[i,6])/3;digits=3))\n")
+end

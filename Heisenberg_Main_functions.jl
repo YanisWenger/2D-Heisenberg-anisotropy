@@ -422,6 +422,63 @@ end
     return (.9f0 - 9f0*Mz2)^2 *(sign(.1f0 -Mz2)+1)/2
 end # just a choice, there is no perfect one
 
+#    ----    get variables    ----    #
+
+function parse_commandline()    # Parse command-line arguments
+    s = ArgParseSettings()
+    @add_arg_table! s begin
+        # Required/Primary arguments
+        "--n", "-n"
+            help = "Number of sweeps"
+            arg_type = Int64
+            required = true
+
+        "--l", "-l"
+            help = "Lattice sizes (comma-separated, e.g., 8,12)"
+            arg_type = String
+            required = true
+        
+        "--t","-t"
+            help = "Minimum, maximum, and number of temperature"
+            arg_type = String
+            required = true
+        
+        "--d", "-d"
+            help = "D values (comma-separated, e.g., -1,1)"
+            arg_type = String
+            required = true
+        
+        "--pbc"
+            help = "Use Periodic Boundary Conditions"
+            action = :store_true
+        
+        "--no-pbc"
+            help = "Disable Periodic Boundary Conditions"
+            action = :store_true
+        
+        "--save"
+            help = "Save results"
+            action = :store_true
+        
+        "--no-save"
+            help = "Do not save results"
+            action = :store_true
+        
+        "--save-lattices"
+            help = "Save lattices the very few last lattices (optional, default: false)"
+            action = :store_true
+
+        "--swap"
+            help = "Which cycle"
+            arg_type = Int64
+            default = 0
+    end
+    return parse_args(s)
+end
+
+function parse_csv(str::String, ::Type{T}) where T# Helper function to parse comma-separated values
+    return [parse(T, x) for x in split(strip(str), ',')]
+end
 
 
 #   @inline     directly put the code of the function where the function is called, instead of really calling it    for single line function, no need "return" inside it

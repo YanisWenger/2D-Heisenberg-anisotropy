@@ -12,7 +12,7 @@ function Get_T_DL(N::Int64, L::Vector{Int64}, End::String="")  # for each lattic
             end
         end
         parsed = map(files) do f
-            name = splitext(last(splitpath(f)))[1]   # robust path handling
+            name = splitext(last(splitpath(f)))[1]
             nums = parse.(Float32, split(name, "_"))
             (; n2 = nums[2], n3 = nums[3])  # 2: T, 3: D
         end
@@ -47,7 +47,10 @@ function Errorpropagation(v::Vector{Any}, Δ::Float32) # propagation of error fo
 end
 
 function plotL(L::Vector{Int64}, T_for_DL::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D::Vector{Float32}, x::Array{Float32, 3}, d::Int64, ytitle::String="", error=[], save::Bool=false)   # read data from a file and plot it vs L
+    xinterp = collect(T[1]:.002:T[end])
     p=Plots.plot()
+    hex_codes = ["#E41A1C", "#377EB8", "#4DAF4A", "#984EA3", "#FF7F00", "#999999", "#F781BF", "#A65628", "#FFFF33"]
+    pal = [parse(Colorant, hex_codes[i]) for i in 1:length(L)]
     if typeof(x) == Matrix{Any}     # For Correlation length
         for t=1:max(round(Int, length(T_for_DL[(L[1], D[d])])/8),1):length(T_for_DL[(L[1], D[d])])
             Plots.plot!(collect(1:Int(L[end]/2-1)), x[end,:][t], label="$(T[t])",legend=:topright) # yet not update to work
@@ -55,21 +58,19 @@ function plotL(L::Vector{Int64}, T_for_DL::Dict{Tuple{Int64, Float32}, Vector{Fl
         Plots.title!(p, "Correlation (L=$(L[end])) as a function of distance")
         Plots.xlabel!(p, "Distance (site)")
     else
-        if error != []  # if there are error bars
-            # if ytitle=="C"; lim=(max(0, minimum(x[:,:,d])),maximum(x[:,3:end,d])+maximum(error[:,3:end,d]))
-            # else
-                lim = :auto
-            # end
-            for l in eachindex(L)
-                T = T_for_DL[(L[l], D[d])]
-                endT = length(T)
-                Plots.plot!(T, x[l, 1:endT,d], yerr = Vector(error[l,1:endT,d]), markerstrokecolor=:auto, label="$(L[l])", ylims = lim)
-            end
-        else            # if there are no error bars
-            for l in eachindex(L)
-                T = T_for_DL[(L[l], D[d])]
-                endT = length(T)
-                Plots.plot!(T, x[l, 1:endT,d], label="$(L[l])", ylims=(max(0, minimum(x[:,1:endT,i])),maximum(x[:,1:endT,i])))
+        # if ytitle=="C"; lim=(max(0, minimum(x[:,:,d])),maximum(x[:,3:end,d]))
+        # else
+            lim = :auto
+        # end
+        for l in eachindex(L)
+            T = T_for_DL[(L[l], D[d])]
+            endT = length(T)
+            yinterp = Spline1D(T, x[l, 1:endT, d], k=3)(xinterp)
+            Plots.plot!(xinterp, yinterp, label="", ylims=lim, seriescolor = pal[l], linecolor = pal[l], markercolor = pal[l], markerstrokecolor = pal[l], ecolor = pal[l])
+            if error != []  # if there are error bars
+                Plots.scatter!(T, x[l, 1:endT,d], yerr = Vector(error[l,1:endT,d]), label="$(L[l])", ylims = lim, seriescolor = pal[l], linecolor = pal[l], markercolor = pal[l], markerstrokecolor = pal[l], ecolor = pal[l])
+            else        # if there are no error bars
+                Plots.scatter!(T, x[l, 1:endT,d], label="$(L[l])", ylims=lim, seriescolor = pal[l])
             end
         end
         Plots.title!(p, ytitle*" as a function of T with D = $(D[d])")
@@ -84,36 +85,31 @@ function plotL(L::Vector{Int64}, T_for_DL::Dict{Tuple{Int64, Float32}, Vector{Fl
     display(p)
 end
 
-function plotD(L::Vector{Int64}, T_for_DL::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D::Vector{Float32}, x::Array{Float32, 3}, ytitle::String="", error=[], l::Int64=length(x[:,1,1]), save::Bool=false)   # read data from a file and plot it vs D
-    p=Plots.plot()
-    pal = cgrad([RGB(.8,.9,1), RGB(0,0,.5), RGB(0,0,0), RGB(.6,0,0), RGB(1,.75,.75)], [0., .4999, .5, .5001, 1.], categorical = false)
-    if error != [] 
-        # if ytitle=="C"; lim=(max(0, minimum(x[l,:,:])),maximum(x[l,3:end,:])+maximum(error[l,3:end,:]))
-        #=else;=# lim = :auto
-        # end
-        for d in eachindex(D)
-            rescaleE=0          # To rescale the Energy (only when y = Energy)
-            if ytitle=="E" && D[d]<0; rescaleE = D[d]; end
-            n = PlotcolorD(D[d], D[1], D[end])
-            T = T_for_DL[(L[l], D[d])]
-            endT = length(T)
-            Plots.plot!(T, x[l, 1:endT, d].-rescaleE, yerr = Vector(error[l, 1:endT, d]), label="$(D[d])", ylims=lim, seriescolor = pal[n], linecolor = pal[n], markercolor = pal[n], markerstrokecolor = pal[n], ecolor = pal[n])
-        end
-    else
-        # if ytitle=="C"; lim=(max(0, minimum(x[l,:,:])),maximum(x[l,3:end,:]))
-        # end
-        for d in eachindex(D)
-            rescaleE=0
-            if ytitle=="E" && D[d]<0; rescaleE = D[d]; end
-            n = PlotcolorD(D[d], D[1], D[end])
-            T = T_for_DL[(L[l], D[d])]
-            endT = length(T)
-            Plots.plot!(T, x[l, 1:endT, d].-rescaleE, label="$(D[d])", seriescolor = pal[n])
+function plotD(pal::PlotUtils.ContinuousColorGradient, L::Vector{Int64}, T_for_DL::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D::Vector{Float32}, x::Array{Float32, 3}, ytitle::String="", error=[], l::Int64=length(x[:,1,1]), save::Bool=false)   # read data from a file and plot it vs D
+    p2 = Plots.plot(load("Colorbar.png"), framestyle = :none, axis = nothing)
+    p1 = Plots.plot()
+    # if ytitle=="C"; lim=(max(0, minimum(x[l,:,:])),maximum(x[l,3:end,:]))
+    #=else;=# lim = :auto
+    # end
+    for d in eachindex(D)
+        rescaleE=0          # To rescale the Energy (only when y = Energy)
+        if ytitle=="E" && D[d]<0; rescaleE = D[d]; end
+        n = PlotcolorD(D[d], D[1], D[end])
+        T = T_for_DL[(L[l], D[d])]
+        endT=length(T)
+        xinterp = collect(T[1]:.002:T[end])
+        yinterp = Spline1D(T, x[l, 1:endT, d], k=3)(xinterp)
+        Plots.plot!(xinterp, yinterp, label=""#=$(D[d])=#, ylims=lim, seriescolor = pal[n], linecolor = pal[n], markercolor = pal[n], markerstrokecolor = pal[n], ecolor = pal[n])
+        if error != [] 
+            Plots.plot!(T, x[l, 1:endT, d].-rescaleE, yerr = Vector(error[l, 1:endT, d]), label=""#=$(D[d])=#, ylims=lim, seriescolor = pal[n], linecolor = pal[n], markercolor = pal[n], markerstrokecolor = pal[n], ecolor = pal[n], seriestype=:scatter, ms=3)
+        else
+            Plots.plot!(T, x[l, 1:endT, d].-rescaleE, label=""#=$(D[d])=#, seriescolor = pal[n], seriestype=:scatter, ms=3)
         end
     end
-    Plots.title!(p, ytitle*" as a function of T for $(L[l])x$(L[l]) lattices")
-    Plots.xlabel!(p, "Temperature")
-    Plots.ylabel!(p, ytitle)
+    Plots.title!(p1, ytitle*" as a function of T for $(L[l])x$(L[l]) lattices")
+    Plots.xlabel!(p1, "Temperature")
+    Plots.ylabel!(p1, ytitle)
+    p=Plots.plot(p1, p2, layout= @layout [a{.88w} b{.12w}])
     if save; Plots.savefig("Plot/"*ytitle*".pdf"); end
     display(p)
 end
@@ -141,7 +137,6 @@ function interpmax_with_error(T::Vector{Float32}, y::Vector{Float32}, y_err::Vec
     
     for i in 1:n_bootstrap
         y_perturbed = y .+ randn(length(y)) .* y_err # Perturb y values according to their uncertainties
-        
         try # Fit spline and find max
             yinterp = Spline1D(T, y_perturbed, k=3)(xinterp)
             idx = argmax(yinterp)
@@ -255,8 +250,7 @@ function CorrTimePlot(AllLattices::Array{Vector{Array{Float32, 3}},3}, T_for_DL:
     display(p)
 end
 
-function Plot_Max_C_Χ(D::Vector{Float32}, T_for_DL::Dict{Tuple{Int64, Float32}, Vector{Float32}}, Y::Array{Float32, 3}, Yerr::Array{Float32, 3}, L::Vector{Int64}, title::String="C/χ", save::Bool=false)
-    pal = cgrad([RGB(.8,.9,1), RGB(0,0,.5), RGB(0,0,0), RGB(.6,0,0), RGB(1,.75,.75)], [0., .4999, .5, .5001, 1.], categorical = false)
+function Plot_Max_C_Χ(pal::PlotUtils.ContinuousColorGradient, D::Vector{Float32}, T_for_DL::Dict{Tuple{Int64, Float32}, Vector{Float32}}, Y::Array{Float32, 3}, Yerr::Array{Float32, 3}, L::Vector{Int64}, title::String="C/χ", save::Bool=false)
     p=Plots.plot() # xmax & T of xmax vs D
     xmax, Tmax, xmaxerr, Tmaxerr = Array{Float64}(undef, length(D), length(L)), Array{Float64}(undef, length(D), length(L)), Array{Float64}(undef, length(D), length(L)), Array{Float64}(undef, length(D), length(L))
     for l in eachindex(L)
@@ -284,6 +278,7 @@ function Plot_Max_C_Χ(D::Vector{Float32}, T_for_DL::Dict{Tuple{Int64, Float32},
     fit_ln = []
     fit_power = []
     x = 8:0.1:70
+    p2 = Plots.plot(load("Colorbar.png"), framestyle = :none, axis = nothing)
     n=zeros(length(D))
     for d in eachindex(D)
         n[d] = PlotcolorD(D[d], D[1], D[end])
@@ -304,12 +299,6 @@ function Plot_Max_C_Χ(D::Vector{Float32}, T_for_DL::Dict{Tuple{Int64, Float32},
     Plots.ylabel!("Temperature of the maximum of $title")
     Plots.xlabel!("Lattice length")
 
-    fig = Figure(size = (62, 330))          # Make the wanted colorbar requires other packages. The colorbar is then saved and combined with the plot
-    Colorbar(fig[1, 1]; colormap = pal, colorrange = (D[1], D[end]), ticks = ([D[1], D[1]/2, 0, D[end]/2, D[end]], string.(round.([D[1], D[1]*2^(-10/3), 0, D[end]*2^(-10/3), D[end]]; digits=2))), label = "D value")
-    Colorbar_name = "Colorbar.png"
-    Makie.save(Colorbar_name, fig; px_per_unit = 8)
-    p2 = Plots.plot(load(Colorbar_name), framestyle = :none, axis = nothing)
-
     p=Plots.plot(p1, p2, layout= @layout [a{.88w} b{.12w}])
     if save; Plots.savefig("Plot/TpicvsL_$title.pdf"); end
     display(p)
@@ -321,9 +310,9 @@ function Plot_Max_C_Χ(D::Vector{Float32}, T_for_DL::Dict{Tuple{Int64, Float32},
         push!(fit_power, (round.(coef(fitpower);digits=3), round.(stderror(fitpower);digits=3)))
 
         n = PlotcolorD(D[d], D[1], D[end])
-        Plots.plot!(L, xmax[d,:], seriestype=:scatter, label="", z=n, seriescolor=pal[n], yerr=xmaxerr[d,:])
+        Plots.plot!(L, xmax[d,:], seriestype=:scatter, label="", z=n, seriescolor=pal[n], yerr=xmaxerr[d,:], xaxis=:log)
         if title=="C"
-            Plots.plot!(x, coef(fitln)[1]*log.(x) .+coef(fitln)[2], label="", z=n, seriescolor=pal[n])
+            Plots.plot!(x, coef(fitln)[1]*log.(x) .+coef(fitln)[2], label="", z=n, seriescolor=pal[n], xaxis=:log)
         else
             Plots.plot!(x, coef(fitpower)[2]*x.^coef(fitpower)[1], label="", z=n, seriescolor=pal[n])
         end
@@ -333,7 +322,6 @@ function Plot_Max_C_Χ(D::Vector{Float32}, T_for_DL::Dict{Tuple{Int64, Float32},
     Plots.ylabel!("Maximum of $title")
     Plots.xlabel!("Lattice length")
 
-    p2 = Plots.plot(load(Colorbar_name), framestyle = :none, axis = nothing)
     p=Plots.plot(p1, p2, layout= @layout [a{.88w} b{.12w}])
     if save; Plots.savefig("Plot/$(title)_max_vsL.pdf"); end
     display(p)
@@ -380,6 +368,12 @@ end
 
 function power_fit_plus(L::Vector{Int64}, p::Vector{Float64})  # a * L ^ b + c
     return p[3]*L.^p[1].+p[2]
+end
+
+function colorbar(pal::PlotUtils.ContinuousColorGradient, D)
+    fig = Figure(size = (62, 330))          # Make the wanted colorbar requires other packages. The colorbar is then saved and combined with the plot
+    Colorbar(fig[1, 1]; colormap = pal, colorrange = (D[1], D[end]), ticks = ([D[1], D[1]/2, 0, D[end]/2, D[end]], string.(round.([D[1], D[1]*2^(-10/3), 0, D[end]*2^(-10/3), D[end]]; digits=2))), label = "← Ising                    D value                    XY →")
+    Makie.save("Colorbar.png", fig; px_per_unit = 8)
 end
 
 # α : specific heat                     Ising : 0       XY : NOP Essential singularity

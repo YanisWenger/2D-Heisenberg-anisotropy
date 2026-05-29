@@ -1,16 +1,44 @@
-using Distributions, Base.Threads, Random, JLD2, StaticArrays, Base.Filesystem   # To have random distrib of spin, parallelize, interpolate, Random, save data in compact file, to use SVector which are optimized, to create folder
+using Distributions, Base.Threads, Random, JLD2, StaticArrays, Base.Filesystem, ArgParse   # To have random distrib of spin, parallelize, interpolate, Random, save data in compact file, to use SVector which are optimized, to create folder
 include("./Heisenberg_Main_functions.jl")
 
-const N=20000                         # Number of lattice sweeps
+# Extract and convert arguments
+parsed_args = parse_commandline()
+const N = parsed_args["n"]
+const L = parse_csv(parsed_args["l"], Int)
+T_min, T_max, nT = Float32.(parse_csv(parsed_args["t"], Float32))
+nT = Int64(nT)
+const D = Float32.(parse_csv(parsed_args["d"], Float32))
 const burn = Int(min(N/4,100000))     # Burning period
-const L=[8,12]                        # Lattice sizes
-const T=Temperatures(.55,1.15,32)     # Temperatures
-const D=Float32.([-1,1])              # Anisotropic term
-const PBC   = true                    # Periodic Boundary Conditions
-const Save  = true                    # To save Data in a folder named L_N
-const SaveLattices = false            # To save the (199 by default) last lattices of each chain
 
-println("  --  $N sweeps  --  ")
+if T_min == 0   # the if is just a way to cheat and use differently the parameters to have more T value around Tpic
+        vect_T = T_max .+ [-.1, -.05, -.03, -.017, -.01, -.005, 0, .005, .01, .017, .03, .05, .1]
+    if nT == 0 || nT == 1
+        const T = round.(Float32.(vect_T);digits=3)
+    else
+        aa = parsed_args["swap"]
+        if aa == 0
+            error("multiple swapping, but no first one was given")
+        else
+            const T = round.(Float32.(vect_T);digits=3)[aa:nT:end]
+        end
+    end
+else
+    const T = Temperatures(T_min, T_max, nT)
+end
+
+# Handle boolean flags (ArgParse returns Bool or nothing)
+const PBC = get(parsed_args, "pbc", false) && !get(parsed_args, "no_pbc", false)
+if !haskey(parsed_args, "pbc") && !haskey(parsed_args, "no_pbc")
+    const PBC = true
+end
+const Save = get(parsed_args, "save", false) && !get(parsed_args, "no_save", false)
+if !haskey(parsed_args, "save") && !haskey(parsed_args, "no_save")
+    const Save = true
+end
+const SaveLattices = get(parsed_args, "save_lattices", false)
+
+
+println("  --  $N sweeps  --  $T")
 starttime = time()
 if !isdir("Data/$(L)_$N")   # create the folder if it does not exist
     mkpath("Data/$(L)_$N")
