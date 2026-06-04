@@ -468,10 +468,15 @@ function parse_commandline()    # Parse command-line arguments
             help = "Save lattices the very few last lattices (optional, default: false)"
             action = :store_true
 
-        "--swap"
-            help = "Which cycle"
+        "--skip"
+            help = "measure every \"skip\""
             arg_type = Int64
-            default = 0
+            default = 10
+
+        "--swap"
+            help = "Try to swap lattices every \"swap\" sweeps"
+            arg_type = Int64
+            default = 80
     end
     return parse_args(s)
 end

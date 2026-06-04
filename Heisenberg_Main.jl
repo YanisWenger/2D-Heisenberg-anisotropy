@@ -9,14 +9,15 @@ T_min, T_max, nT = Float32.(parse_csv(parsed_args["t"], Float32))
 nT = Int64(nT)
 const D = Float32.(parse_csv(parsed_args["d"], Float32))
 const burn = Int(min(N/4,100000))     # Burning period
+const swap = parsed_args["swap"]
+const Skip = parsed_args["skip"]
 
 if T_min == 0   # the if is just a way to cheat and use differently the parameters to have more T value around Tpic
         vect_T = T_max .+ [-.1, -.05, -.03, -.017, -.01, -.005, 0, .005, .01, .017, .03, .05, .1]
     if nT == 0 || nT == 1
         const T = round.(Float32.(vect_T);digits=3)
     else
-        aa = parsed_args["swap"]
-        if aa == 0
+        if swap == 80
             error("multiple swapping, but no first one was given")
         else
             const T = round.(Float32.(vect_T);digits=3)[aa:nT:end]
@@ -45,7 +46,7 @@ if !isdir("Data/$(L)_$N")   # create the folder if it does not exist
 end
 for d in D
     for l in L
-        E1_end = MH_parallel_tempering(N, T, L, l, d, burn, PBC, Save, SaveLattices)
+        E1_end = MH_parallel_tempering(N, T, L, l, d, burn, PBC, Save, SaveLattices, Skip, swap)
     end
 end
 
