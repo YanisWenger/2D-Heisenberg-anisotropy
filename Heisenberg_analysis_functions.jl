@@ -47,7 +47,6 @@ function Errorpropagation(v::Vector{Any}, Δ::Float32) # propagation of error fo
 end
 
 function plotL(L::Vector{Int64}, T_for_DL::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D::Vector{Float32}, x::Array{Float32, 3}, d::Int64, ytitle::String="", error=[], save::Bool=false)   # read data from a file and plot it vs L
-    xinterp = collect(T[1]:.002:T[end])
     p=Plots.plot()
     hex_codes = ["#E41A1C", "#377EB8", "#4DAF4A", "#984EA3", "#FF7F00", "#999999", "#F781BF", "#A65628", "#FFFF33"]
     pal = [parse(Colorant, hex_codes[i]) for i in 1:length(L)]
@@ -65,12 +64,10 @@ function plotL(L::Vector{Int64}, T_for_DL::Dict{Tuple{Int64, Float32}, Vector{Fl
         for l in eachindex(L)
             T = T_for_DL[(L[l], D[d])]
             endT = length(T)
-            yinterp = Spline1D(T, x[l, 1:endT, d], k=3)(xinterp)
-            Plots.plot!(xinterp, yinterp, label="", ylims=lim, seriescolor = pal[l], linecolor = pal[l], markercolor = pal[l], markerstrokecolor = pal[l], ecolor = pal[l])
             if error != []  # if there are error bars
-                Plots.scatter!(T, x[l, 1:endT,d], yerr = Vector(error[l,1:endT,d]), label="$(L[l])", ylims = lim, seriescolor = pal[l], linecolor = pal[l], markercolor = pal[l], markerstrokecolor = pal[l], ecolor = pal[l])
+                Plots.plot!(T, x[l, 1:endT,d], yerr = Vector(error[l,1:endT,d]), label="$(L[l])", ylims = lim, seriescolor = pal[l], linecolor = pal[l], markercolor = pal[l], markerstrokecolor = pal[l], ecolor = pal[l])
             else        # if there are no error bars
-                Plots.scatter!(T, x[l, 1:endT,d], label="$(L[l])", ylims=lim, seriescolor = pal[l])
+                Plots.plot!(T, x[l, 1:endT,d], label="$(L[l])", ylims=lim, seriescolor = pal[l])
             end
         end
         Plots.title!(p, ytitle*" as a function of T with D = $(D[d])")
@@ -78,10 +75,8 @@ function plotL(L::Vector{Int64}, T_for_DL::Dict{Tuple{Int64, Float32}, Vector{Fl
     end
     Plots.ylabel!(p, ytitle)
     if save ==true
-        Plots.savefig("Plot/"*ytitle*".pdf")
+        Plots.savefig("Plot/"*ytitle*"_d=$(D[d]).pdf")
     end
-    # println("size vect: ", size(x))
-    # println("endT: ", endT)
     display(p)
 end
 
@@ -97,13 +92,10 @@ function plotD(pal::PlotUtils.ContinuousColorGradient, L::Vector{Int64}, T_for_D
         n = PlotcolorD(D[d], D[1], D[end])
         T = T_for_DL[(L[l], D[d])]
         endT=length(T)
-        xinterp = collect(T[1]:.002:T[end])
-        yinterp = Spline1D(T, x[l, 1:endT, d], k=3)(xinterp)
-        Plots.plot!(xinterp, yinterp, label=""#=$(D[d])=#, ylims=lim, seriescolor = pal[n], linecolor = pal[n], markercolor = pal[n], markerstrokecolor = pal[n], ecolor = pal[n])
         if error != [] 
-            Plots.plot!(T, x[l, 1:endT, d].-rescaleE, yerr = Vector(error[l, 1:endT, d]), label=""#=$(D[d])=#, ylims=lim, seriescolor = pal[n], linecolor = pal[n], markercolor = pal[n], markerstrokecolor = pal[n], ecolor = pal[n], seriestype=:scatter, ms=3)
+            Plots.plot!(T, x[l, 1:endT, d].-rescaleE, yerr = Vector(error[l, 1:endT, d]), label=""#=$(D[d])=#, ylims=lim, seriescolor = pal[n], linecolor = pal[n], markercolor = pal[n], markerstrokecolor = pal[n], ecolor = pal[n])#, seriestype=:scatter, ms=3)
         else
-            Plots.plot!(T, x[l, 1:endT, d].-rescaleE, label=""#=$(D[d])=#, seriescolor = pal[n], seriestype=:scatter, ms=3)
+            Plots.plot!(T, x[l, 1:endT, d].-rescaleE, label=""#=$(D[d])=#, seriescolor = pal[n])#, seriestype=:scatter, ms=3)
         end
     end
     Plots.title!(p1, ytitle*" as a function of T for $(L[l])x$(L[l]) lattices")
@@ -147,6 +139,32 @@ function interpmax_with_error(T::Vector{Float32}, y::Vector{Float32}, y_err::Vec
         end
     end    
     return (median(max_values), median(max_positions), std(max_values), std(max_positions))
+end
+
+function Gaussmax(T::Vector{Float32}, y::Vector{Float32})
+    ymax = maximum(y)
+    i=1
+    while y[i] < .9*ymax
+        i+=1
+    end
+    i_min = copy(i)
+    i=length(T)
+    while y[i] < .9*ymax
+        i-=1
+    end
+    i_max = i
+    if T[i_max] - T[i_min] < .02
+        println("The pic is well defined, no need to fit a gaussian")
+        return 0
+    else
+        fit = curve_fit(Gauss_fit, T[i_min:i_max], y[i_min:i_max], [0.8, 0.2, 0.5, 0.9])
+        x = collect(T[i_min]:0.001f0:T[i_max])
+        p=Plots.plot(T, y[1:length(T)])
+        println(coef(fit))
+        Plots.plot!(x, Gauss_fit(x, coef(fit)))
+        display(p)
+        return coef(fit)[1]
+    end
 end
 
 function crit(L::Vector{Int64}, T::Vector{Float32}, y::Array{Float32,2}, title::String="") # calculate α & γ, plot if title is a non-empty string
@@ -253,9 +271,11 @@ end
 function Plot_Max_C_Χ(pal::PlotUtils.ContinuousColorGradient, D::Vector{Float32}, T_for_DL::Dict{Tuple{Int64, Float32}, Vector{Float32}}, Y::Array{Float32, 3}, Yerr::Array{Float32, 3}, L::Vector{Int64}, title::String="C/χ", save::Bool=false)
     p=Plots.plot() # xmax & T of xmax vs D
     xmax, Tmax, xmaxerr, Tmaxerr = Array{Float64}(undef, length(D), length(L)), Array{Float64}(undef, length(D), length(L)), Array{Float64}(undef, length(D), length(L)), Array{Float64}(undef, length(D), length(L))
+    # xmax2, Tmax2, xmaxerr2, Tmaxerr2 = Array{Float64}(undef, length(D), length(L)), Array{Float64}(undef, length(D), length(L)), Array{Float64}(undef, length(D), length(L)), Array{Float64}(undef, length(D), length(L))
     for l in eachindex(L)
         for d in eachindex(D)
             xmax[d,l], Tmax[d,l], xmaxerr[d,l], Tmaxerr[d,l] = interpmax_with_error(T_for_DL[(L[l], D[d])], filter(!iszero, Y[l,:,d]), filter(!iszero, Yerr[l,:,d]))
+            # xmax2[d,l], Tmax2[d,l], xmaxerr2[d,l], Tmaxerr2[d,l] = Gaussmax(T_for_DL[(L[l], D[d])], filter(!iszero, Y[l,:,d]), filter(!iszero, Yerr[l,:,d]))
         end
         Plots.plot!(D, Tmax[:,l], seriestype=:scatter, label="$(L[l])", yerr=Tmaxerr[:,l])
     end
@@ -275,9 +295,10 @@ function Plot_Max_C_Χ(pal::PlotUtils.ContinuousColorGradient, D::Vector{Float32
     display(p)
     
     fit_Tc = []
-    fit_ln = []
+    fit_ln = zeros(Float64, length(D), 3)
+    fit_ln_err = zeros(Float64, length(D), 3)
     fit_power = []
-    x = 8:0.1:70
+    x = L[1]:0.1:L[end]
     p2 = Plots.plot(load("Colorbar.png"), framestyle = :none, axis = nothing)
     n=zeros(length(D))
     for d in eachindex(D)
@@ -303,16 +324,20 @@ function Plot_Max_C_Χ(pal::PlotUtils.ContinuousColorGradient, D::Vector{Float32
     if save; Plots.savefig("Plot/TpicvsL_$title.pdf"); end
     display(p)
     p1=Plots.plot()
+    println(L)
     for d in eachindex(D)
-        fitln =  curve_fit(ln_fit, L, xmax[d,:], [1.1, 1.8])
+        if title=="C"
+            fitln =  curve_fit(fit_C2, L, xmax[d,:], [1.1, 0.7, 0.1])
+            fit_ln[d,:] = round.(coef(fitln);digits=3)
+            fit_ln_err[d,:] = round.(stderror(fitln);digits=3)
+        end
         fitpower = curve_fit(power_fit, L, xmax[d,:], [.8, 1.1])
-        push!(fit_ln, (round(coef(fitln)[1];digits=3), round(stderror(fitln)[1];digits=3)))
         push!(fit_power, (round.(coef(fitpower);digits=3), round.(stderror(fitpower);digits=3)))
 
         n = PlotcolorD(D[d], D[1], D[end])
         Plots.plot!(L, xmax[d,:], seriestype=:scatter, label="", z=n, seriescolor=pal[n], yerr=xmaxerr[d,:], xaxis=:log)
         if title=="C"
-            Plots.plot!(x, coef(fitln)[1]*log.(x) .+coef(fitln)[2], label="", z=n, seriescolor=pal[n], xaxis=:log)
+            Plots.plot!(x, coef(fitln)[1]*log.(x/coef(fitln)[2]).*(1 .+ coef(fitln)[3]./x), label="", z=n, seriescolor=pal[n], xaxis=:log)
         else
             Plots.plot!(x, coef(fitpower)[2]*x.^coef(fitpower)[1], label="", z=n, seriescolor=pal[n])
         end
@@ -325,7 +350,7 @@ function Plot_Max_C_Χ(pal::PlotUtils.ContinuousColorGradient, D::Vector{Float32
     p=Plots.plot(p1, p2, layout= @layout [a{.88w} b{.12w}])
     if save; Plots.savefig("Plot/$(title)_max_vsL.pdf"); end
     display(p)
-    return Tmax, xmax, fit_ln, fit_power, fit_Tc
+    return Tmax, xmax, fit_ln, fit_ln_err, fit_power, fit_Tc
 end
 
 function Plot_Max_ξ(L::Vector{Int64}, D::Vector{Float32}, T_for_DL::Dict{Tuple{Int64, Float32}, Vector{Float32}}, Corr::Array{Vector{Float32}, 3}, l::Int64, ln::Bool=false, only_one_d::Int64=0)
@@ -370,10 +395,40 @@ function power_fit_plus(L::Vector{Int64}, p::Vector{Float64})  # a * L ^ b + c
     return p[3]*L.^p[1].+p[2]
 end
 
+function Gauss_fit(x::Vector{Float32}, p::Vector{Float64})
+    return p[3]*exp.(-((x .-p[1])/p[2]).^2) .+p[4]
+end
+
+function fit_C(x::Vector{Int64}, p::Vector{Float64})       # a * ln(L/L0)(1+L'/L)
+    return p[1]*log.(x/p[2]).*(1 .+ p[3]./x)
+end
+
+function fit_C2(x::Vector{Int64}, p::Vector{Float64})       # a * ln(L/L0)(1+L'/L)
+    return p[1]*log.(x) .+p[2] .+ p[3]./x
+end
+
 function colorbar(pal::PlotUtils.ContinuousColorGradient, D)
     fig = Figure(size = (62, 330))          # Make the wanted colorbar requires other packages. The colorbar is then saved and combined with the plot
     Colorbar(fig[1, 1]; colormap = pal, colorrange = (D[1], D[end]), ticks = ([D[1], D[1]/2, 0, D[end]/2, D[end]], string.(round.([D[1], D[1]*2^(-10/3), 0, D[end]*2^(-10/3), D[end]]; digits=2))), label = "← Ising                    D value                    XY →")
     Makie.save("Colorbar.png", fig; px_per_unit = 8)
+end
+
+function scaling_plot_C_Ising(L::Vector{Int64}, T_for_DL::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D::Vector{Float32}, C::Array{Float32, 3}, d::Int64, Tpic::Array{Float64, 2}, error=[], save::Bool=false)
+    hex_codes = ["#E41A1C", "#377EB8", "#4DAF4A", "#984EA3", "#FF7F00", "#999999", "#F781BF", "#A65628", "#FFFF33"]
+    pal = [parse(Colorant, hex_codes[i]) for i in 1:length(L)]
+    p=Plots.plot()
+    for l in eachindex(L)
+        T = T_for_DL[(L[l], D[d])]
+        endT = length(T)
+        Plots.plot!((T.-Tpic[d,l])*L[l], C[l, 1:endT,d]/log(L[l]), yerr = Vector(error[l,1:endT,d]), label="$(L[l])", seriescolor = pal[l], linecolor = pal[l], markercolor = pal[l], markerstrokecolor = pal[l], ecolor = pal[l])
+    end
+    Plots.title!(p, "C, with D = $(D[d])")
+    Plots.xlabel!(p, "(T-Tc(L))*L")
+    Plots.ylabel!(p, "C/ln(L)")
+    if save ==true
+        Plots.savefig("Plot/Scaling_C_Ising.pdf")
+    end
+    display(p)
 end
 
 # α : specific heat                     Ising : 0       XY : NOP Essential singularity

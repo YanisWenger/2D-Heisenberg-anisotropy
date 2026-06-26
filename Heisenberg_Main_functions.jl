@@ -98,7 +98,7 @@ end
         newspin = NewPhiTheta(spin, σ, rng)
     else
         random = rand(rng)       # This way to generate less random number, thus faster code
-        if pIsing > 0 && random < pIsing
+        if random < pIsing
             Whichflip = 2
             newspin = @SVector [spin[1], Float32(π) - spin[2]]
         elseif random < pXY
@@ -180,7 +180,7 @@ function IsingClusterUpdate(ZLattice::AbstractArray{Float32, 2}, L::Int, T::Floa
             end
         end
     end
-    @inbounds for j in 1:L, i in 1:L # faster as Julia stores arrays in column-major order
+    @inbounds for j in 1:L, i in 1:L # faster j, i than i, j as Julia stores arrays in column-major order
         if InCluster[i,j]
             ZLattice[i,j] = pi32 - ZLattice[i,j]
         end
@@ -298,7 +298,7 @@ function MHStep(step::Int, rep::Replica, L::Int, D::Float32, PBC::Bool, rng::Abs
     return rep
 end
 
-function MH_parallel_tempering(N::Int, T::Vector{Float32}, L::Vector{Int}, l::Int, D::Float32, burn::Int, PBC::Bool, Save::Bool=false, SaveLattices::Bool=false, Skip::Int=10, swap::Int=80)     # Sampler i.e. main function
+function MH_parallel_tempering(N::Int, T::Vector{Float32}, L::Vector{Int}, l::Int, D::Float32, burn::Int, PBC::Bool, Save::Bool=false, SaveLattices::Bool=false, Skip::Int=10, swap::Int=1000)     # Sampler i.e. main function
     nT = length(T)
     Lattices = Array{Array{SVector{2,Float32},2}}(undef, nT, div(2000, Skip)-!(N%swap==0)*Skip)       # To save the last lattices, 
     Replicas = Vector{Replica}(undef, nT)
@@ -414,6 +414,45 @@ end
     return Float32.(round.(Tmin .* (Tmax/Tmin) .^ ((0:N-1)/(N-1)); digits=3))
 end
 
+@inline function Temperatures2(Tmid::Float32)
+    v = collect(0.05:0.01:0.15)
+    return round.(Float32.(Tmid .+ sort(unique(vcat(v, -v, collect(-.042:.006:0.042)))));digits=3)
+end
+
+@inline function Temperatures3(Tmid::Float32)
+    return round.(Float32.(Tmid .+ [-.02,-.015,-.01,-.005,.005,.01,.015,.02]);digits=3)
+end
+
+@inline function Temperatures4(Tmid::Float32)
+    return round.(Float32.(Tmid .+ [-.002,.002]);digits=3)
+end
+
+@inline function Temperatures5(Tmid::Float32)
+    return round.(Float32.(Tmid .+ [-.001,.001]);digits=3)
+end
+
+@inline function Temperatures003(Tmid::Float32)
+    return round.(Float32.(Tmid .+ [-.012,-.009,-.006,-.003,0,.003,.006,.009,.012]);digits=3)
+end
+
+@inline function Temperatures004(Tmid::Float32)
+    return round.(Float32.(Tmid .+ [-.012,-.008,-.004,0,.004,.008,.012]);digits=3)
+end
+
+@inline function Temperatures004long(Tmid::Float32)
+    return round.(Float32.(Tmid .+ [-.04,-.036,-.032,-.028,-.024,-.02,-.016,-.012,-.008,-.004,0,.004,.008,.012,.016,.02,.024,.028,.032,.036,.04]);digits=3)
+end
+
+@inline function Temperatures004extralong(Tmid::Float32)
+    return round.(Float32.(Tmid .+ collect(-0.072:0.004:0.072));digits=3)
+end
+
+@inline function Temperatures6(Tmid::Float32)
+    v = collect(0.015:0.004:0.04)
+    u = [.002,.007,.011]
+    return round.(Float32.(Tmid .+ sort(unique(vcat(v, -v, u, -u))));digits=3)
+end
+
 @inline @fastmath function IsingProba(Mz2::Float32)   # Probability of Ising-flip, just a choice, there is no perfect one
     return (1.9f0*Mz2 -.95f0)^2 *(sign(Mz2 - .5f0)+1)/2
 end
@@ -476,7 +515,7 @@ function parse_commandline()    # Parse command-line arguments
         "--swap"
             help = "Try to swap lattices every \"swap\" sweeps"
             arg_type = Int64
-            default = 80
+            default = 1000
     end
     return parse_args(s)
 end

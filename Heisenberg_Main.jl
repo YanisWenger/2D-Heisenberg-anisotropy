@@ -12,19 +12,23 @@ const burn = Int(min(N/4,100000))     # Burning period
 const swap = parsed_args["swap"]
 const Skip = parsed_args["skip"]
 
-if T_min == 0   # the if is just a way to cheat and use differently the parameters to have more T value around Tpic
+if T_min == 0   # this if is just a way to cheat and use differently the parameters to have more T value around Tpic
         vect_T = T_max .+ [-.1, -.05, -.03, -.017, -.01, -.005, 0, .005, .01, .017, .03, .05, .1]
     if nT == 0 || nT == 1
         const T = round.(Float32.(vect_T);digits=3)
     else
-        if swap == 80
+        if swap == 1000
             error("multiple swapping, but no first one was given")
         else
             const T = round.(Float32.(vect_T);digits=3)[aa:nT:end]
         end
     end
 else
-    const T = Temperatures(T_min, T_max, nT)
+    if T_max == 0 # the if is just a way to cheat and use differently the parameters to have more T value around Tpic
+        const T = Temperatures003(T_min)
+    else
+        const T = Temperatures(T_min, T_max, nT)
+    end
 end
 
 # Handle boolean flags (ArgParse returns Bool or nothing)
