@@ -1,5 +1,5 @@
 using Distributions, Base.Threads, Random, JLD2, StaticArrays, Base.Filesystem, ArgParse   # To have random distrib of spin, parallelize, interpolate, Random, save data in compact file, to use SVector which are optimized, to create folder
-include("./Heisenberg_Main_functions.jl")
+include("./Heisenberg_MH_parallel_T_functions.jl")
 
 # Extract and convert arguments
 parsed_args = parse_commandline()
