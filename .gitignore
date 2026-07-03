@@ -2,5 +2,11 @@
 *.toml
 *.txt
 *.svg
+*.pdf
 Test.jl
+Add_T.jl
 Data/
+Plot/
+Quick_Beamer/
+Colorbar.png
+AllData.jld2
