@@ -1,9 +1,9 @@
-function Get_T_LD(N::Int64, L::Vector{Int64}, End::String="")  # for each lattice size gives which T have each d
+function Get_T_LD(L::Vector{Int64}, FolderName::String="")  # for each lattice size gives which T have each d
     T_for_LD = Dict{Tuple{Int64, Float32}, Vector{Float32}}()
     D_for_L = Dict{Int64, Vector{Float32}}()
     all_T = []
     for l in L
-        files = glob("$(l)_*.jld2", ("Data/$(L)_$(N)$End"))
+        files = glob("$(l)_*.jld2", ("Data/$FolderName"))
         for f in files
             name = splitext(last(splitpath(f)))[1]
             parts = split(name, "_")
@@ -50,10 +50,9 @@ end
 # end
 
 function plotL(L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D_for_L::Dict{Int64, Vector{Float32}}, x::Array{Float32, 3}, Dvalue::Real, ytitle::String="", error=[], save::Bool=false)   # read data from a file and plot it vs L
-    p=Plots.plot()
+    p=Plots.plot(framestyle = :box)
     Dvalue = Float32(Dvalue)
-    hex_codes = ["#E41A1C", "#377EB8", "#4DAF4A", "#984EA3", "#FF7F00", "#999999", "#F781BF", "#A65628", "#4790FF","#BBBB33"]
-    pal = [parse(Colorant, hex_codes[i]) for i in 1:length(L)]
+    pal = cgrad([RGB(.3,1,.3), RGB(.3,.3, 1), RGB(1,.3,.3)], length(L), categorical = true)
     # if ytitle=="C"; lim=(max(0, minimum(x[:,:,d])),maximum(x[:,3:end,d]))
     # else
         lim = :auto
@@ -72,7 +71,7 @@ function plotL(L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64, Float32}, Vector{Fl
             println("For L=$(L[l]), valid D are: ", D_for_L[L[l]])
         end
     end
-    Plots.title!(p, ytitle*" as a function of T with D = $(Dvalue)")
+    # Plots.title!(p, ytitle*" as a function of T with D = $(Dvalue)")
     Plots.xlabel!(p, "Temperature")
     Plots.ylabel!(p, ytitle)
     if save ==true
@@ -83,7 +82,7 @@ end
 
 function plotD(pal::PlotUtils.ContinuousColorGradient, L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D_for_L::Dict{Int64, Vector{Float32}}, x::Array{Float32, 3}, ytitle::String="", error=[], l::Int64=length(x[:,1,1]), save::Bool=false)   # read data from a file and plot it vs D
     p2 = Plots.plot(load("Colorbar.png"), framestyle = :none, axis = nothing)
-    p1 = Plots.plot()
+    p1 = Plots.plot(framestyle = :box)
     # if ytitle=="C"; lim=(max(0, minimum(x[l,:,:])),maximum(x[l,3:end,:]))
     #=else;=# lim = :auto
     # end
@@ -109,7 +108,7 @@ function plotD(pal::PlotUtils.ContinuousColorGradient, L::Vector{Int64}, T_for_L
 end
 
 function plotLCorrelation(L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D_for_L::Dict{Int64, Vector{Float32}}, Corr::Array{Vector{Float32}, 3}, Dvalue::Real, t::Real)
-    p=Plots.plot()
+    p=Plots.plot(framestyle = :box)
     Dvalue = Float32(Dvalue)
     for l in eachindex(L)
         T=T_for_LD[L[l], Dvalue]
@@ -126,20 +125,25 @@ function plotLCorrelation(L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64, Float32}
     Plots.ylabel!(p, "average Correlation")
 end
 
-function plotDCorrelation(L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D_for_L::Dict{Int64, Vector{Float32}}, Corr::Array{Vector{Float32}, 3}, l::Int64, t::Real)
-    p=Plots.plot()
-    for d in 1:3:length(D_for_L[L[l]])
-        T=T_for_LD[L[l],D_for_L[L[l]][d]]
+function plotDCorrelation(pal::PlotUtils.ContinuousColorGradient, L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D_for_L::Dict{Int64, Vector{Float32}}, Corr::Array{Vector{Float32}, 3}, l::Int64, t::Real)
+    p2 = Plots.plot(load("Colorbar.png"), framestyle = :none, axis = nothing)
+    p1 = Plots.plot(legend=:topright, framestyle = :box)
+    ll = L[l]
+    D = D_for_L[ll]
+    for d in 1:3:length(D_for_L[ll])
+        dd = D[d]
+        T=T_for_LD[ll,dd]
         closestT = argmin(abs.(T .- t))     # Compute the temperature closest to the requested one
-        Plots.plot!(collect(1:Int(L[l]/2-1)), Corr[l, closestT, d], label="D=$(D_for_L[L[l]][d]), T=$(T[closestT])", legend=:topright)
+        Plots.plot!(collect(1:Int(ll/2-1)), Corr[l, closestT, d], label="D=$(dd), T=$(T[closestT])", seriescolor = pal[PlotcolorD(D[d], D[1], D[end])])
     end
-    Plots.title!(p, "Correlation  L=$(L[l]), T close to $t")
-    Plots.xlabel!(p, "Distance (site)")
-    Plots.ylabel!(p, "average Correlation")
+    Plots.title!(p1, "Correlation  L=$ll, T close to $t")
+    Plots.xlabel!(p1, "Distance (site)")
+    Plots.ylabel!(p1, "average Correlation")
+    display(Plots.plot(p1, p2, layout= @layout [a{.88w} b{.12w}]))
 end
 
 function plotTCorrelation(L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D_for_L::Dict{Int64, Vector{Float32}}, Corr::Array{Vector{Float32}, 3}, Dvalue::Real, l::Int64)
-    p=Plots.plot()
+    p=Plots.plot(framestyle = :box)
     if Dvalue ∈ D_for_L[L[l]]
         d = findfirst(==(Dvalue), D_for_L[L[l]])
         T = T_for_LD[(L[l], Dvalue)]
@@ -190,31 +194,31 @@ end
 #     return (median(max_values), median(max_positions), std(max_values), std(max_positions))
 # end
 
-function Gaussmax(T::Vector{Float32}, y::Vector{Float32})
-    ymax = maximum(y)
-    i=1
-    while y[i] < .9*ymax
-        i+=1
-    end
-    i_min = copy(i)
-    i=length(T)
-    while y[i] < .9*ymax
-        i-=1
-    end
-    i_max = i
-    if T[i_max] - T[i_min] < .02
-        println("The pic is well defined, no need to fit a gaussian")
-        return 0
-    else
-        fit = curve_fit(Gauss_fit, T[i_min:i_max], y[i_min:i_max], [0.8, 0.2, 0.5, 0.9])
-        x = collect(T[i_min]:0.001f0:T[i_max])
-        p=Plots.plot(T, y[1:length(T)])
-        println(coef(fit))
-        Plots.plot!(x, Gauss_fit(x, coef(fit)))
-        display(p)
-        return coef(fit)[1]
-    end
-end
+# function Gaussmax(T::Vector{Float32}, y::Vector{Float32})
+#     ymax = maximum(y)
+#     i=1
+#     while y[i] < .9*ymax
+#         i+=1
+#     end
+#     i_min = copy(i)
+#     i=length(T)
+#     while y[i] < .9*ymax
+#         i-=1
+#     end
+#     i_max = i
+#     if T[i_max] - T[i_min] < .02
+#         println("The pic is well defined, no need to fit a gaussian")
+#         return 0
+#     else
+#         fit = curve_fit(Gauss_fit, T[i_min:i_max], y[i_min:i_max], [0.8, 0.2, 0.5, 0.9])
+#         x = collect(T[i_min]:0.001f0:T[i_max])
+#         p=Plots.plot(T, y[1:length(T)], framestyle = :box)
+#         println(coef(fit))
+#         Plots.plot!(x, Gauss_fit(x, coef(fit)))
+#         display(p)
+#         return coef(fit)[1]
+#     end
+# end
 
 # function crit(L::Vector{Int64}, T::Vector{Float32}, y::Array{Float32,2}, title::String="") # calculate α & γ, plot if title is a non-empty string
 #     ymax = Vector{Tuple}(undef, length(L))
@@ -247,35 +251,26 @@ function critlength(data::Array{Vector{Float32},3}, T_for_LD::Dict{Tuple{Int64, 
         if typeof(negativ) == Nothing; n = length(data)
         else; n=negativ-1; end
         x=collect(1:n)
-        fit =  curve_fit(linear_fit, log.(x)*ln + !ln*x, log.(data[1:n]), [-.09,9.])
+        xx = [2^j for j in 0:Int(trunc(log2(n)))]
+        yy = [2.0^j/1000 for j in Int(trunc(log2(data[n]*1000))+1):2:Int(trunc(log2(data[1]*1000)))]
+        fit = curve_fit(linear_fit, log.(x)*ln + !ln*x, log.(data[1:n]), [-.09,9.])
         m,p = coef(fit); σ = stderror(fit)
 
         if ln; lab="power law fit"; else; lab="exponential fit";end
-        a=Plots.plot()
-        Plots.plot!(a, log.(x)*ln + !ln*x, log.(data[1:n]), seriestype=:scatter, label="data at T=$(T_for_LD[L[l],Dvalue][closestT])")
-        Plots.plot!(a, log.(x)*ln + !ln*x, m*(log.(x)*ln + !ln*x) .+p, label=lab)
-        Plots.ylabel!(a, "Ln(Correlation)")
-        if ln == true; Plots.xlabel!(a, "Ln(Distance)"); ξ=σξ=0
-        else; Plots.xlabel!(a, "Distance"); ξ =-1/m; σξ = σ[1]/m^2
+        a=Plots.plot(framestyle = :box, titlefont = font(9), xguidefont = font(7), yguidefont = font(7), xtickfontsize = 6, ytickfontsize = 6, legendfontsize=6, yticks=(log.(yy), string.(yy)))# yticks=collect(max(data[1], exp(p)) :1: min(data[n], n^m*exp(p))), string.(1))
+        if ln == true; ξ=σξ=0; Plots.plot!(xticks=(log.(xx), string.(xx)))
+        else; ξ =-1/m; σξ = σ[1]/m^2
         end
+        Plots.plot!(a, log.(x)*ln + !ln*x, log.(data[1:n]), seriestype=:scatter, markersize=3, label="T=$(T_for_LD[L[l],Dvalue][closestT])")
+        Plots.plot!(a, log.(x)*ln + !ln*x, m*(log.(x)*ln + !ln*x) .+p, label=lab)
+        Plots.xlabel!(a, "Distance")
+        Plots.ylabel!(a, "Correlation")
         if PLOT==true;  title!(a, "Correlation at T=$(T_for_LD[L[l],Dvalue][closestT]), L=$(L[l]), D=$(Dvalue)");   display(a);   end
         return m*ln + !ln*ξ, σ[1]*ln+!ln*σξ, a
     else
         println(Dvalue, L[l])
         println("For L=$(L[l]), valid D are: ", D_for_L[L[l]])
     end
-end
-
-function CorrelationFunction(L::Int64, x::Vector{Int64}, p::Vector{Float64})
-    return exp.(2π*p[2].*G(x)).*(exp.(-x/p[1])+exp.(-(L.+x)/p[1]))
-end
-
-function G(x::Vector{Int64}, Nk::Int64=100)
-    y=zeros(length(x))
-    for k=1:Nk
-        y += (cos.(k*x).-1) / (1-cos(k))
-    end
-    return y/Nk
 end
 
 function Correlation(spin1::Vector, spin2::Vector)  # Correlation between two spins (i.e. dot product)
@@ -299,7 +294,7 @@ function MeanCorrTime(Lattices::Vector{Array{Float32, 3}})  # calculate the mean
 end
 
 function CorrTimePlot(AllLattices::Array{Vector{Array{Float32, 3}},3}, T_for_LD::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D::Vector{Float32}, d::Int64, L::Vector{Int64}, l::Int64, save::Bool=false)
-    p=Plots.plot()
+    p=Plots.plot(framestyle = :box)
     pal = cgrad([:lightblue, :green, :red])
     for i in eachindex(T_for_LD[(L[l], D[d])])
         MCT = MeanCorrTime(AllLattices[l,i,d])
@@ -314,29 +309,30 @@ function CorrTimePlot(AllLattices::Array{Vector{Array{Float32, 3}},3}, T_for_LD:
 end
 
 function Plot_Max_C_Χ(pal::PlotUtils.ContinuousColorGradient, D_for_L::Dict{Int64, Vector{Float32}}, T_for_LD::Dict{Tuple{Int64, Float32}, Vector{Float32}}, Y::Array{Float32, 3}, Yerr::Array{Float32, 3}, L::Vector{Int64}, title::String="C/χ", save::Bool=false)
-    p=Plots.plot() # xmax & T of xmax vs D
+    pal_L = cgrad([RGB(.3,1,.3), RGB(.3,.3, 1), RGB(1,.3,.3)], length(L), categorical = true)
+    p=Plots.plot(framestyle = :box) # xmax & T of xmax vs D
     xmax, Tmax, xmaxerr, Tmaxerr = Dict{Tuple{Int64, Float32}, Float32}(), Dict{Tuple{Int64, Float32}, Float32}(), Dict{Tuple{Int64, Float32}, Float32}(), Dict{Tuple{Int64, Float32}, Float32}()
     for l in eachindex(L)
         ll = L[l]
-        for d in eachindex(D_for_L[L[l]])
+        for d in eachindex(D_for_L[ll])
             dd = D_for_L[ll][d]
             xmax[ll,dd], ArgMax = maximum(Y[l,:,d]), argmax(Y[l,:,d])
             Tmax[ll,dd], xmaxerr[ll,dd], Tmaxerr[ll,dd] = T_for_LD[ll, dd][ArgMax], Yerr[l,ArgMax,d], 0
         end
-        Plots.plot!(D_for_L[L[l]], [Tmax[ll,i] for i in D_for_L[ll]], seriestype=:scatter, label="$(L[l])", yerr=[Tmaxerr[ll,i] for i in D_for_L[ll]])
+        Plots.plot!(D_for_L[ll], [Tmax[ll,i] for i in D_for_L[ll]], seriestype=:scatter, label=ll, yerr=[Tmaxerr[ll,i] for i in D_for_L[ll]], seriescolor=pal_L[l])
     end
     Plots.title!("Tpic of $title vs D")
     Plots.ylabel!("Temperature of the maximum of $title")
-    Plots.xlabel!("⬅ Ising                              Value of D                              XY ➡")
+    Plots.xlabel!("⬅ Ising                Value of D                XY ➡")
     if save; Plots.savefig("Plot/Tpic_$title.pdf"); end
     display(p)
-    p=Plots.plot()
+    p=Plots.plot(framestyle = :box)
     for l in eachindex(L)
-        Plots.plot!(D_for_L[L[l]], [xmax[L[l],i] for i in D_for_L[L[l]]], seriestype=:scatter, label="$(L[l])", yerr=[xmaxerr[L[l],i] for i in D_for_L[L[l]]])
+        Plots.plot!(D_for_L[L[l]], [xmax[L[l],i] for i in D_for_L[L[l]]], seriestype=:scatter, label="$(L[l])", yerr=[xmaxerr[L[l],i] for i in D_for_L[L[l]]], seriescolor=pal_L[l])
     end
     Plots.title!("$title max vs D")
     Plots.ylabel!("Maximum of $title")
-    Plots.xlabel!("⬅ Ising                              Value of D                              XY ➡")
+    Plots.xlabel!("⬅ Ising                Value of D                XY ➡")
     if save; Plots.savefig("Plot/$(title)_max.pdf"); end
     display(p)
     
@@ -353,10 +349,10 @@ function Plot_Max_C_Χ(pal::PlotUtils.ContinuousColorGradient, D_for_L::Dict{Int
     for d in allD
         n[d] = PlotcolorD(d, allD[1], allD[end])
     end
-    p1=Plots.plot() # xmax & T of xmax vs L
+    p1=Plots.plot(framestyle = :box) # xmax & T of xmax vs L
     for d in eachindex(allD)
         dd = allD[d]
-        L_for_D = [k for (k, v) in pairs(D_for_L) if allD[d] ∈ v]
+        L_for_D = sort([k for (k, v) in pairs(D_for_L) if allD[d] ∈ v])
         for l in [findfirst(==(L_for_D[i]), L) for i in eachindex(L_for_D)]
             ll = L[l]
             xmax[ll,dd], ArgMax = maximum(Y[l,:,d]), argmax(Y[l,:,d])
@@ -364,14 +360,12 @@ function Plot_Max_C_Χ(pal::PlotUtils.ContinuousColorGradient, D_for_L::Dict{Int
         end
         vect_Tmax = [Tmax[i,dd] for i in L_for_D]
         vect_Tmaxerr = [Tmaxerr[i,dd] for i in L_for_D]
-        if title=="Susc"
-            try
-                fitTc = curve_fit(power_fit_plus, L, vect_Tmax, [-1.1, .9, .9])
-                push!(fit_Tc, (round.(coef(fitTc);digits=3), round.(stderror(fitTc);digits=3)))
-                Plots.plot!(x, coef(fitTc)[3]*x.^coef(fitTc)[1].+coef(fitTc)[2], seriescolor=pal[n[dd]], label="")
-            catch
-                println("can't fit D = $dd")
-            end
+        try
+            fitTc = curve_fit(power_fit_plus, L, vect_Tmax, [-1.1, .9, .9])
+            push!(fit_Tc, (round.(coef(fitTc);digits=3), round.(stderror(fitTc);digits=3)))
+            Plots.plot!(x, coef(fitTc)[3]*x.^coef(fitTc)[1].+coef(fitTc)[2], seriescolor=pal[n[dd]], label="")
+        catch
+            println("can't fit D = $dd")
         end
         Plots.plot!(L, vect_Tmax, seriestype=:scatter, seriescolor=pal[n[dd]], label="", yerr=vect_Tmaxerr)
     end
@@ -382,10 +376,10 @@ function Plot_Max_C_Χ(pal::PlotUtils.ContinuousColorGradient, D_for_L::Dict{Int
     p=Plots.plot(p1, p2, layout= @layout [a{.88w} b{.12w}])
     if save; Plots.savefig("Plot/TpicvsL_$title.pdf"); end
     display(p)
-    p1=Plots.plot()
+    p1=Plots.plot(framestyle = :box)
     for d = eachindex(allD)
         dd = allD[d]
-        L_for_D = [k for (k, v) in pairs(D_for_L) if allD[d] ∈ v]
+        L_for_D = sort([k for (k, v) in pairs(D_for_L) if allD[d] ∈ v])
         vect_xmax = [xmax[i,dd] for i in L_for_D]
         vect_xmaxerr = [xmaxerr[i,dd] for i in L_for_D]
         if title=="C"
@@ -404,7 +398,7 @@ function Plot_Max_C_Χ(pal::PlotUtils.ContinuousColorGradient, D_for_L::Dict{Int
         end
     end
     Plots.plot!(p1, colorbar=true, colorbar_title="D Value")
-    Plots.title!("$(title)_max vs L")
+    Plots.title!("$title max vs L")
     Plots.ylabel!("Maximum of $title")
     Plots.xlabel!("Lattice length")
 
@@ -425,7 +419,7 @@ function Plot_Max_ξ(L::Vector{Int64}, D::Vector{Float32}, T_for_LD::Dict{Tuple{
             # println(critic)
             Tmax[d] = round(T_for_LD[(L[l], D[d])][argmax(critic)];digits=3)
         end
-        p=Plots.plot(D, Tmax)
+        p=Plots.plot(D, Tmax, framestyle = :box)
         Plots.xlabel!("⬅ Ising                              Value of D                              XY ➡")
         Plots.ylabel!("Temperature of the maximum of ξ")
         display(p)
@@ -467,17 +461,18 @@ function fit_C2(x::Vector{Int64}, p::Vector{Float64})       # a * ln(L/L0)(1+L'/
     return p[1]*log.(x) .+p[2] .+ p[3]./x
 end
 
-function colorbar(pal::PlotUtils.ContinuousColorGradient, D)
-    fig = Figure(size = (62, 330))          # Make the wanted colorbar requires other packages. The colorbar is then saved and combined with the plot
-    Colorbar(fig[1, 1]; colormap = pal, colorrange = (D[1], D[end]), ticks = ([D[1], D[1]/2, 0, D[end]/2, D[end]], string.(round.([D[1], D[1]*2^(-10/3), 0, D[end]*2^(-10/3), D[end]]; digits=2))), label = "← Ising                    D value                    XY →")
+function colorbar(pal::PlotUtils.ContinuousColorGradient, D_for_L::Dict{Int64, Vector{Float32}})    #   Make the wanted colorbar requires other packages. The colorbar is then saved and combined with the plot
+    set_theme!(fonts = (; regular="CMU Serif"))
+    fig = Figure(size = (66, 330))
+    D = sort(unique(vcat(values(D_for_L)...)))
+    Colorbar(fig[1, 1]; colormap = pal, colorrange = (D[1], D[end]), ticks = ([D[1], D[1]/2, 0, D[end]/2, D[end]], string.(round.([D[1], D[1]*2^(-10/3), 0, D[end]*2^(-10/3), D[end]]; digits=2))), label = "← Ising                D value                XY →")
     Makie.save("Colorbar.png", fig; px_per_unit = 8)
 end
 
-function scaling_plot_C_Ising(L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D_for_L::Dict{Int64, Vector{Float32}}, C::Array{Float32, 3}, Dvalue::Real, Tpic::Dict{Tuple{Int64, Float32}, Float32}, error::Array{Float32, 3}=[], save::Bool=false)
+function scaling_plot_C_Ising(L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D_for_L::Dict{Int64, Vector{Float32}}, C::Array{Float32, 3}, Dvalue::Real, Tpic::Dict{Tuple{Int64, Float32}, Float32}, error::Array{Float32, 3}, save::Bool=false)
     Dvalue = Float32(Dvalue)
-    hex_codes = ["#E41A1C", "#377EB8", "#4DAF4A", "#984EA3", "#FF7F00", "#999999", "#F781BF", "#A65628", "#FFFF33"]
-    pal = [parse(Colorant, hex_codes[i]) for i in 1:length(L)]
-    p=Plots.plot()
+    pal = cgrad([RGB(.3,1,.3), RGB(.3,.3, 1), RGB(1,.3,.3)], length(L), categorical = true)
+    p=Plots.plot(framestyle = :box)
     for l in eachindex(L)
         ll = L[l]
         if haskey(T_for_LD, (ll, Dvalue))
@@ -496,11 +491,10 @@ function scaling_plot_C_Ising(L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64, Floa
     display(p)
 end
 
-function scaling_plot_χ_Ising(L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D_for_L::Dict{Int64, Vector{Float32}}, χ::Array{Float32, 3}, Dvalue::Real, Tpic::Dict{Tuple{Int64, Float32}, Float32}, error::Array{Float32, 3}=[], save::Bool=false)
+function scaling_plot_χ_Ising(L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D_for_L::Dict{Int64, Vector{Float32}}, χ::Array{Float32, 3}, Dvalue::Real, Tpic::Dict{Tuple{Int64, Float32}, Float32}, error::Array{Float32, 3}, save::Bool=false)
     Dvalue = Float32(Dvalue)
-    hex_codes = ["#E41A1C", "#377EB8", "#4DAF4A", "#984EA3", "#FF7F00", "#999999", "#F781BF", "#A65628", "#FFFF33"]
-    pal = [parse(Colorant, hex_codes[i]) for i in 1:length(L)]
-    p=Plots.plot()
+    pal = cgrad([RGB(.3,1,.3), RGB(.3,.3, 1), RGB(1,.3,.3)], length(L), categorical = true)
+    p=Plots.plot(framestyle = :box)
     for l in eachindex(L)
         ll = L[l]
         if haskey(T_for_LD, (ll, Dvalue))
@@ -510,13 +504,158 @@ function scaling_plot_χ_Ising(L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64, Flo
             Plots.plot!((T.-Tpic[ll, Dvalue])*ll, χ[l, 1:endT,d]*ll.^(-7/4), yerr = error[l,1:endT,d]*ll^(-7/4), label=ll, seriescolor = pal[l], linecolor = pal[l], markercolor = pal[l], markerstrokecolor = pal[l], ecolor = pal[l])
         end
     end
-    Plots.title!(p, "χ, with D = $Dvalue")
-    Plots.xlabel!(p, "(T-Tc(L))*L")
-    Plots.ylabel!(p, "χ*L^(-7/4))")
+    Plots.title!(p, "\$\\chi\$, with D = $Dvalue")
+    Plots.xlabel!(p, raw"$(T-Tc(L))*L$")
+    Plots.ylabel!(p, raw"$\chi*L^{-7/4}$")
     if save ==true
         Plots.savefig("Plot/Scaling_C_Ising.pdf")
     end
     display(p)
+end
+
+function scaling_plot_C_XY(L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D_for_L::Dict{Int64, Vector{Float32}}, C::Array{Float32, 3}, Dvalue::Real, Tpic::Dict{Tuple{Int64, Float32}, Float32}, error::Array{Float32, 3}, save::Bool=false)
+    Dvalue = Float32(Dvalue)
+    pal = cgrad([RGB(.3,1,.3), RGB(.3,.3, 1), RGB(1,.3,.3)], length(L), categorical = true)
+    p=Plots.plot(framestyle = :box)
+    for l in eachindex(L)
+        ll = L[l]
+        if haskey(T_for_LD, (ll, Dvalue))
+            T = T_for_LD[ll, Dvalue]
+            endT = length(T)
+            d = findfirst(==(Dvalue), D_for_L[ll])
+            # Plots.plot!((T.-Tpic[ll, Dvalue])*ll, χ[l, 1:endT,d]*ll.^(-7/4), yerr = error[l,1:endT,d]*ll^(-7/4), label=ll, seriescolor = pal[l], linecolor = pal[l], markercolor = pal[l], markerstrokecolor = pal[l], ecolor = pal[l])
+            Plots.plot!(T.-Tpic[ll, Dvalue], C[l, 1:endT,d], yerr = error[l,1:endT,d]*ll^(-7/4), label=ll, seriescolor = pal[l], linecolor = pal[l], markercolor = pal[l], markerstrokecolor = pal[l], ecolor = pal[l])
+        end
+    end
+    Plots.title!(p, "C, with D = $Dvalue")
+    Plots.xlabel!(p, "\$T-Tc(L)\$")
+    Plots.ylabel!(p, "\$C\$")#"χ*L^(-7/4))")
+    if save ==true
+        Plots.savefig("Plot/Scaling_C_Ising.pdf")
+    end
+    display(p)
+end
+
+function scaling_plot_χ_XY(L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D_for_L::Dict{Int64, Vector{Float32}}, χ::Array{Float32, 3}, Dvalue::Real, Tpic::Dict{Tuple{Int64, Float32}, Float32}, error::Array{Float32, 3}, pow::Float64, save::Bool=false)
+    Dvalue = Float32(Dvalue)
+    pal = cgrad([RGB(.3,1,.3), RGB(.3,.3, 1), RGB(1,.3,.3)], length(L), categorical = true)
+    p=Plots.plot(framestyle = :box)
+    for l in eachindex(L)
+        ll = L[l]
+        if haskey(T_for_LD, (ll, Dvalue))
+            T = T_for_LD[ll, Dvalue]
+            endT = length(T)
+            d = findfirst(==(Dvalue), D_for_L[ll])
+            x = T.-Tpic[ll, Dvalue]
+            Plots.plot!(sign.(x).*sqrt.(x.*sign.(x)).^3*ll, χ[l, 1:endT,d]*ll.^(-pow), yerr = error[l,1:endT,d]*ll^(-7/4), label=ll, seriescolor = pal[l], linecolor = pal[l], markercolor = pal[l], markerstrokecolor = pal[l], ecolor = pal[l], xlim = (-2.5,4.5))
+        end
+    end
+    # Plots.title!(p, "χ, with D = $Dvalue")
+    Plots.xlabel!(p, "\$L \\cdot (T-Tc(L))^{3/2}\$")
+    Plots.ylabel!(p, "\$\\chi\\cdot L ^{-$pow}\$")
+    if save ==true
+        Plots.savefig("Plot/Scaling_C_Ising.pdf")
+    end
+    display(p)
+end
+
+function LogLogPlotAndFit(x::Vector, y::Vector, guess::Vector, xax::String, yax::String, lab::String)
+    P=Plots.plot(framestyle = :box)
+    xlog = log.(x)
+    ylog = log.(y)
+    # yy = round.(y;digits=1)
+    # yy = Int.([2^j for j in trunc(log2(y[1])):1:trunc(log2(y[end]))])
+    yy = [1, 3, 10, 30, 100, 300]
+    fit  = curve_fit(linear_fit, xlog, ylog, guess)
+    m, p = coef(fit)
+    Δm, Δp = stderror(fit)
+    Plots.plot!(xlog, ylog, label=lab, seriestype=:scatter, xticks=(xlog, string.(x)), yticks=(log.(yy), string.(yy)))
+    Plots.plot!(xlog, xlog*m .+p, label = "\$\\mathcal{O}\\, (L^{"*nice_result(m, Δm)*"}) \$")
+    Plots.xlabel!(xax)
+    Plots.ylabel!(yax)
+    display(P)
+    return m, p, Δm, Δp
+end
+
+function xlogPlotAndFit(x::Vector, y::Vector, guess::Vector)
+    P=Plots.plot(framestyle = :box)
+    xlog = log.(x)
+    fit  = curve_fit(linear_fit, xlog, y, guess)
+    m, p = coef(fit)
+    Plots.plot!(xlog, y, label="\$\\chi_{max}\$", seriestype=:scatter, xticks=(xlog, string.(x)))
+    Plots.plot!(xlog, xlog*m .+p, label = "log fit", titlefont = font(18), xguidefont = font(14), yguidefont = font(14), xtickfontsize = 12, ytickfontsize = 12, legendfontsize=12)
+    Plots.xlabel!("Lattice length L")
+    Plots.ylabel!("Maximum of heat capacity")
+    display(P)
+    return m, p, stderror(fit)[1], stderror(fit)[2]
+end
+
+function first_nonzero_digit(x::Float64)  # give the first non-zero digit of a number and its position
+    if x >= 1 || x <= 0
+        error("first_nonzero_decimal requires an input must be between 0 and 1")
+    end
+    position = -floor(Int, log10(x))
+    shifted = x * (10 ^ position)
+    digit = floor(Int, shifted)
+    if digit == 0           # Rare case due to precision, try next position
+        return first_nonzero_decimal(x * 10)
+    elseif digit == 10      # Precision issue where it rounded up to 10
+        digit = 1
+        position += 1
+    end
+    return digit, position
+end
+
+function nice_result(x::Float64, err::Float64)  #   Input: result and error margin      Output: result with proper number of decimal according to the error margin
+    pow = floor(Int, log10(abs(x)))
+    if pow > 0
+        error("x=$x ... Cannont handle number smaller than -10 nor bigger than 10")
+    end
+    er, digit = first_nonzero_digit(err)
+    if er == 9; digit -= 1; er = 1
+    else; er +=1
+    end
+    if -pow > digit
+        return "0."*"0"^digit*"($er)"
+    end
+    x = round(x, digits=digit)
+    s = string(x)
+    if '.' ∉ s;     s *= ".";   end
+    parts = split(s, '.')
+    current_digits = length(parts[2])
+    if current_digits < digit
+        s *= "0"^ (digit - current_digits)
+    end
+    return s*"($er)"
+end
+
+function Convergence_check(L::Vector{Int64}, FolderName::String="", ll::Int64=0)
+    T, D_for_L, T_for_LD = Get_T_LD(L, FolderName)   # Obtain Temperature and anisotropic term in Data/$(L)_$N i.e. Data/[8, 12, 20]_1000000
+    conv=[]
+    if ll == 0  # if the lattice size is not given, check for all lattice size
+        for ll in L
+            for d in eachindex(D_for_L[ll])
+                dd = D_for_L[ll][d]
+                for t in eachindex(T_for_LD[(ll, dd)])
+                    tt = T_for_LD[(ll, dd)][t]
+                    Data = load("Data/$FolderName/$(ll)_$(tt)_$(dd).jld2")
+                    x = rhat(Chains(Data["Energies"], ["my param"])).nt[2][1]   # Gelman-Rubin convergnce test
+                    push!(conv, (x, ll, tt, dd))
+                end
+            end
+        end
+    else        # else check for the given latice size
+        for d in eachindex(D_for_L[ll])
+            dd = D_for_L[ll][d]
+            for t in eachindex(T_for_LD[(ll, dd)])
+                tt = T_for_LD[(ll, dd)][t]
+                Data = load("Data/$FolderName/$(ll)_$(tt)_$(dd).jld2")
+                x = rhat(Chains(Data["Energies"], ["my param"])).nt[2][1]   # Gelman-Rubin convergnce test
+                push!(conv, (x, tt, dd))
+            end
+        end
+    end
+    return conv
 end
 
 # α : specific heat                     Ising : 0       XY : NOP Essential singularity
