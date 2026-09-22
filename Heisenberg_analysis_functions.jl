@@ -45,12 +45,8 @@ function Binor2nd(arr::Vector{Float32}, Nbin::Int64, Nperbin::Int64, T::Float32,
     return Bins
 end
 
-# function Errorpropagation(v::Vector{Any}, Δ::Float32) # propagation of error for c from the error on E (binor2nd is used instead)
-#     return sqrt(sum((v .- mean(v)).^2)/length(v))*2*Δ
-# end
-
 function plotL(L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D_for_L::Dict{Int64, Vector{Float32}}, x::Array{Float32, 3}, Dvalue::Real, ytitle::String="", error=[], save::Bool=false)   # read data from a file and plot it vs L
-    p=Plots.plot(framestyle = :box)
+    p=Plots.plot()
     Dvalue = Float32(Dvalue)
     pal = cgrad([RGB(.3,1,.3), RGB(.3,.3, 1), RGB(1,.3,.3)], length(L), categorical = true)
     # if ytitle=="C"; lim=(max(0, minimum(x[:,:,d])),maximum(x[:,3:end,d]))
@@ -82,7 +78,7 @@ end
 
 function plotD(pal::PlotUtils.ContinuousColorGradient, L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D_for_L::Dict{Int64, Vector{Float32}}, x::Array{Float32, 3}, ytitle::String="", error=[], l::Int64=length(x[:,1,1]), save::Bool=false)   # read data from a file and plot it vs D
     p2 = Plots.plot(load("Colorbar.png"), framestyle = :none, axis = nothing)
-    p1 = Plots.plot(framestyle = :box)
+    p1 = Plots.plot()
     ll=L[l]; 
     D = D_for_L[ll];
     # if ytitle=="C"; lim=(max(0, minimum(x[l,:,:])),maximum(x[l,3:end,:]))
@@ -110,7 +106,7 @@ function plotD(pal::PlotUtils.ContinuousColorGradient, L::Vector{Int64}, T_for_L
 end
 
 function plotLCorrelation(L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D_for_L::Dict{Int64, Vector{Float32}}, Corr::Array{Vector{Float32}, 3}, Dvalue::Real, t::Real)
-    p=Plots.plot(framestyle = :box)
+    p=Plots.plot()
     Dvalue = Float32(Dvalue)
     for l in eachindex(L)
         ll=L[l]
@@ -132,7 +128,7 @@ end
 
 function plotDCorrelation(pal::PlotUtils.ContinuousColorGradient, L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D_for_L::Dict{Int64, Vector{Float32}}, Corr::Array{Vector{Float32}, 3}, ll::Int64, t::Real)
     p2 = Plots.plot(load("Colorbar.png"), framestyle = :none, axis = nothing)
-    p1 = Plots.plot(legend=:topright, framestyle = :box)
+    p1 = Plots.plot(legend=:topright)
     l = findfirst(x -> x==ll, L)
     D = D_for_L[ll]
     for d in 1:3:length(D_for_L[ll])
@@ -150,17 +146,18 @@ end
 function plotTCorrelation(L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D_for_L::Dict{Int64, Vector{Float32}}, Corr::Array{Vector{Float32}, 3}, Dvalue::Real, ll::Int64)
     Dvalue = Float32(Dvalue)
     l = findfirst(x -> x==ll, L)
-    p=Plots.plot(framestyle = :box)
+    p=Plots.plot()
+    x=collect(1:Int(ll/2-1))
     if Dvalue ∈ D_for_L[ll]
         d = findfirst(==(Dvalue), D_for_L[ll])
         T = T_for_LD[(ll, Dvalue)]
         nT = length(T)
         for t=1:max(round(Int, nT/8),1):nT
-            Plots.plot!(collect(1:Int(ll/2-1)), Corr[l, t, d], label="$(T[t])",legend=:topright)
+            Plots.plot!(x, Corr[l, t, d], label="$(T[t])",legend=:bottomleft, seriestype=:path, markershape=:circle)#, ylim=(.02,.9))
         end
-        Plots.title!(p, "Correlation  L=$(L[l]), D=$(Dvalue)")
+        # Plots.title!(p, "Correlation  L=$(L[l]), D=$(Dvalue)")
         Plots.xlabel!(p, "Distance (site)")
-        Plots.ylabel!(p, "average Correlation")
+        Plots.ylabel!(p, "Correlation")
     else
         println("For L=$(L[l]), valid D are: ", D_for_L[ll])
     end
@@ -176,79 +173,7 @@ function PlotcolorD(x::Float32, dmin::Float32, dmax::Float32)   # associate a D 
     end
 end
 
-# function interpmax(T::Vector{Float32}, y::Vector{Float32}) # interpolate and find the Tmax (for all Lattice size)
-#     xinterp = collect(.5:.001:2)
-#     yinterp=Spline1D(T, y, k=3)(xinterp)
-#     return (findmax(yinterp)[1], xinterp[findmax(yinterp)[2]])
-# end
-
-# function interpmax_with_error(T::Vector{Float32}, y::Vector{Float32}, y_err::Vector{Float32}; n_bootstrap=1000) # interpolate and find the Tmax (for all Lattice size) then bootstrap resampling to get error bars
-#     xinterp = collect(T[1]:.002:T[end])
-#     max_values = Float32[]
-#     max_positions = Float32[]
-    
-#     for i in 1:n_bootstrap
-#         y_perturbed = y .+ randn(length(y)) .* y_err # Perturb y values according to their uncertainties
-#         try # Fit spline and find max
-#             yinterp = Spline1D(T, y_perturbed, k=3)(xinterp)
-#             idx = argmax(yinterp)
-#             push!(max_values, yinterp[idx])
-#             push!(max_positions, xinterp[idx])
-#         catch
-#             continue # Skip failed fits (rare)
-#         end
-#     end    
-#     return (median(max_values), median(max_positions), std(max_values), std(max_positions))
-# end
-
-# function Gaussmax(T::Vector{Float32}, y::Vector{Float32})
-#     ymax = maximum(y)
-#     i=1
-#     while y[i] < .9*ymax
-#         i+=1
-#     end
-#     i_min = copy(i)
-#     i=length(T)
-#     while y[i] < .9*ymax
-#         i-=1
-#     end
-#     i_max = i
-#     if T[i_max] - T[i_min] < .02
-#         println("The pic is well defined, no need to fit a gaussian")
-#         return 0
-#     else
-#         fit = curve_fit(Gauss_fit, T[i_min:i_max], y[i_min:i_max], [0.8, 0.2, 0.5, 0.9])
-#         x = collect(T[i_min]:0.001f0:T[i_max])
-#         p=Plots.plot(T, y[1:length(T)], framestyle = :box)
-#         println(coef(fit))
-#         Plots.plot!(x, Gauss_fit(x, coef(fit)))
-#         display(p)
-#         return coef(fit)[1]
-#     end
-# end
-
-# function crit(L::Vector{Int64}, T::Vector{Float32}, y::Array{Float32,2}, title::String="") # calculate α & γ, plot if title is a non-empty string
-#     ymax = Vector{Tuple}(undef, length(L))
-#     for l in eachindex(L)
-#         ymax[l] = interpmax(T, y[l,:])
-#     end
-#     println(ymax)
-#     fit =  curve_fit(linear_fit, log.(L), log.(first.(ymax)), if (y=="c"); [.1,-.7]; elseif (y=="susc"); [2.,-4.]; else [.9,-.9] end)
-#     println(#=typeof(fit), "\n",=# fit)
-#     m, p = coef(fit)
-#     σm, σp = stderror(fit)
-#     if title != ""
-#         a = Plots.plot()
-#         Plots.plot!(a, log.(L), log.(first.(ymax)), seriestype=:scatter)
-#         Plots.plot!(a, log.(L), m*log.(L) .+p)
-#         Plots.xlabel!(a, "Ln(Lattice length)")
-#         Plots.ylabel!(a, "Ln(max("*title*"))")
-#         display(a)
-#     end
-#     return m, σm
-# end
-
-function critlength(data::Array{Vector{Float32},3}, T_for_LD::Dict{Tuple{Int64, Float32}, Vector{Float32}}, L::Vector{Int64}, D_for_L::Dict{Int64, Vector{Float32}}, ll::Int64, Dvalue::Real, t::Real, pow::Bool, PLOT::Bool, y="Connected correlation function") # Calculate critical exp or correlation length (by default)
+function corrlength(data::Array{Vector{Float32},3}, T_for_LD::Dict{Tuple{Int64, Float32}, Vector{Float32}}, L::Vector{Int64}, D_for_L::Dict{Int64, Vector{Float32}}, ll::Int64, Dvalue::Real, t::Real, pow::Bool, PLOT::Bool, y="Connected correlation function") # Calculate critical exp or correlation length (by default)
     Dvalue = Float32(Dvalue)
     if Dvalue ∈ D_for_L[ll]
         d = findfirst(==(Dvalue), D_for_L[ll])
@@ -309,7 +234,7 @@ function MeanCorrTime(Lattices::Vector{Array{Float32, 3}})  # calculate the mean
 end
 
 function CorrTimePlot(AllLattices::Array{Vector{Array{Float32, 3}},3}, T_for_LD::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D::Vector{Float32}, d::Int64, L::Vector{Int64}, l::Int64, save::Bool=false)
-    p=Plots.plot(framestyle = :box)
+    p=Plots.plot()
     pal = cgrad([:lightblue, :green, :red])
     for i in eachindex(T_for_LD[(L[l], D[d])])
         MCT = MeanCorrTime(AllLattices[l,i,d])
@@ -325,7 +250,7 @@ end
 
 function Plot_Max_C_Χ(pal::PlotUtils.ContinuousColorGradient, D_for_L::Dict{Int64, Vector{Float32}}, T_for_LD::Dict{Tuple{Int64, Float32}, Vector{Float32}}, Y::Array{Float32, 3}, Yerr::Array{Float32, 3}, L::Vector{Int64}, title::String="C/χ", save::Bool=false)
     pal_L = cgrad([RGB(.3,1,.3), RGB(.3,.3, 1), RGB(1,.3,.3)], length(L), categorical = true)
-    p=Plots.plot(framestyle = :box) # xmax & T of xmax vs D
+    p=Plots.plot() # xmax & T of xmax vs D
     xmax, Tmax, xmaxerr, Tmaxerr = Dict{Tuple{Int64, Float32}, Float32}(), Dict{Tuple{Int64, Float32}, Float32}(), Dict{Tuple{Int64, Float32}, Float32}(), Dict{Tuple{Int64, Float32}, Float32}()
     for l in eachindex(L)
         ll = L[l]
@@ -341,7 +266,7 @@ function Plot_Max_C_Χ(pal::PlotUtils.ContinuousColorGradient, D_for_L::Dict{Int
     Plots.xlabel!("⬅ Ising                Value of D                XY ➡")
     if save; Plots.savefig("Plot/Tpic_$title.pdf"); end
     display(p)
-    p=Plots.plot(framestyle = :box)
+    p=Plots.plot()
     for l in eachindex(L)
         Plots.plot!(D_for_L[L[l]], [xmax[L[l],i] for i in D_for_L[L[l]]], seriestype=:scatter, label="$(L[l])", yerr=[xmaxerr[L[l],i] for i in D_for_L[L[l]]], seriescolor=pal_L[l])
     end
@@ -362,7 +287,7 @@ function Plot_Max_C_Χ(pal::PlotUtils.ContinuousColorGradient, D_for_L::Dict{Int
     for d in allD
         n[d] = PlotcolorD(d, allD[1], allD[end])
     end
-    p1=Plots.plot(framestyle = :box) # xmax & T of xmax vs L
+    p1=Plots.plot() # xmax & T of xmax vs L
     for d in eachindex(allD)
         dd = allD[d]
         L_for_D = sort([k for (k, v) in pairs(D_for_L) if allD[d] ∈ v])
@@ -385,7 +310,7 @@ function Plot_Max_C_Χ(pal::PlotUtils.ContinuousColorGradient, D_for_L::Dict{Int
     if save; Plots.savefig("Plot/TpicvsL_$title.pdf"); end
     display(p)
 
-    p1=Plots.plot(framestyle = :box)
+    p1=Plots.plot()
     for d = eachindex(allD)
         dd = allD[d]
         L_for_D = sort([k for (k, v) in pairs(D_for_L) if allD[d] ∈ v])
@@ -393,7 +318,7 @@ function Plot_Max_C_Χ(pal::PlotUtils.ContinuousColorGradient, D_for_L::Dict{Int
         vect_xmax = [xmax[i,dd] for i in L_for_D]
         vect_xmaxerr = [xmaxerr[i,dd] for i in L_for_D]
         if title=="Heat capacity"
-            fitpowerorln =  curve_fit(fit_C2, L_for_D, vect_xmax, [1.1, 0.7, 0.1])
+            fitpowerorln =  curve_fit(fit_C, L_for_D, vect_xmax, [1.1, 0.7, 0.1])
         else
             fitpowerorln = curve_fit(power_fit, L_for_D, vect_xmax, [.8, 1.1])
         end
@@ -432,11 +357,11 @@ function Fit_ξ(L::Vector{Int64}, D_for_L::Dict{Int64, Vector{Float32}}, T_for_L
                 Exp_vect = []; Exp_err_vect = []
                 Pow_vect = []; Pow_err_vect = []
                 for tt in T_for_LD[(ll, dd)]
-                    Exp, Exp_err = critlength(Corr, T_for_LD, L, D_for_L, ll, dd, tt, false, false)
+                    Exp, Exp_err = corrlength(Corr, T_for_LD, L, D_for_L, ll, dd, tt, false, false)
                     critic_exp[ll,tt,dd] = (Exp, Exp_err)
                     push!(Exp_vect, Exp)
                     push!(Exp_err_vect, Exp_err)
-                    Pow, Pow_err = critlength(Corr, T_for_LD, L, D_for_L, ll, dd, tt, true, false)
+                    Pow, Pow_err = corrlength(Corr, T_for_LD, L, D_for_L, ll, dd, tt, true, false)
                     critic_pow[ll,tt,dd] = (Pow, Pow_err)
                     push!(Pow_vect, Pow)
                     push!(Pow_err_vect, Pow_err)
@@ -449,7 +374,7 @@ function Fit_ξ(L::Vector{Int64}, D_for_L::Dict{Int64, Vector{Float32}}, T_for_L
             end
         end
         p=Plots.scatter(xaxis="⬅ Ising                Value of D                XY ➡", yaxis = "Temperature of the maximum of ξ")
-        for l in eachindex(L); Plots.scatter!(D_for_L[L[l]], Tmax_array[l,1:length(D_for_L[L[l]])], yerr=(Tmax_err_lower[l,1:length(D_for_L[L[l]])], Tmax_err_upper[l,1:length(D_for_L[L[l]])]), seriescolor = pal[l], label="\$\\xi\$"); end
+        for l in eachindex(L); Plots.scatter!(D_for_L[L[l]], Tmax_array[l,1:length(D_for_L[L[l]])], yerr=(Tmax_err_lower[l,1:length(D_for_L[L[l]])], Tmax_err_upper[l,1:length(D_for_L[L[l]])]), seriescolor = pal[l], label="\$\\xi'_{max}\$"); end
         display(p)
         return critic_exp, critic_pow, Tmax
     else    # To be able to use this function for one D value at a time
@@ -458,22 +383,63 @@ function Fit_ξ(L::Vector{Int64}, D_for_L::Dict{Int64, Vector{Float32}}, T_for_L
         Exp_vect = []; Exp_err_vect = []
         Pow_vect = []; Pow_err_vect = []
         for tt in T_for_LD[(ll, dd)]
-            Exp, Exp_err = critlength(Corr, T_for_LD, L, D_for_L, ll, dd, tt, false, false)
+            Exp, Exp_err = corrlength(Corr, T_for_LD, L, D_for_L, ll, dd, tt, false, false)
             critic_exp[ll,tt,dd] = (Exp, Exp_err)
             push!(Exp_vect, Exp)
             push!(Exp_err_vect, Exp_err)
-            Pow, Pow_err = critlength(Corr, T_for_LD, L, D_for_L, ll, dd, tt, true, false)
+            Pow, Pow_err = corrlength(Corr, T_for_LD, L, D_for_L, ll, dd, tt, true, false)
             critic_pow[ll,tt,dd] = (Pow, Pow_err)
             push!(Pow_vect, Pow)
             push!(Pow_err_vect, Pow_err)
         end
-        display(Plots.plot(T_for_LD[ll,dd], Exp_vect, yerr=Exp_err_vect, xaxis="Temperature", yaxis="Correlation length", label="$dd $ll", linecolor =:purple, markercolor =:purple))#, ylim=(0,80)))
-        display(Plots.plot(T_for_LD[ll,dd], Pow_vect, yerr=Pow_err_vect, xaxis="Temperature", yaxis="Pow", label="$dd $ll", linecolor =:purple, markercolor =:purple))
+        # Exp_vect2 = []; Exp_err_vect2 = []
+        # for tt in T_for_LD[(200, .02f0)]
+        #     Exp, Exp_err = corrlength(Corr, T_for_LD, L, D_for_L, 200, 0.02f0, tt, false, false)
+        #     critic_exp[200,tt,.02f0] = (Exp, Exp_err)
+        #     push!(Exp_vect2, Exp)
+        #     push!(Exp_err_vect2, Exp_err)
+        # end
+        display(Plots.plot(T_for_LD[ll,dd], Exp_vect, yerr=Exp_err_vect, xaxis="Temperature", yaxis="Correlation length", label="$dd $ll", linecolor =:purple, markercolor =:purple))#, ylim=(0,50)))
+        display(Plots.plot(T_for_LD[ll,dd], Pow_vect, yerr=Pow_err_vect, xaxis="Temperature", yaxis="Exponent", label="$dd $ll", linecolor =:purple, markercolor =:purple))
+        # p=Plots.plot(1 ./T_for_LD[ll,dd], Exp_vect, yerr=Exp_err_vect, xaxis="Inverse temperature \$\\beta\$", yaxis=:log, label="\$D=$dd\$", linecolor =:purple, markercolor =:purple, legend=:bottomright)
+        # Plots.ylabel!("Correlation length \$\\xi\$")
+        # Plots.plot!(p, 1 ./T_for_LD[200,0.02f0], Exp_vect2, yerr=Exp_err_vect2, label="\$D=0.02\$", linecolor =:blue, markercolor =:blue)
+        # x=collect(1/T_for_LD[ll,dd][end]:0.01:1/T_for_LD[ll,dd][1])
+        # xx=collect(1/T_for_LD[ll,dd][end]:0.01:min(1/T_for_LD[ll,dd][1], 1.964))
+        # Plots.plot!(p, x, ℯ.^(2*π*x)./1550, label="\$\\exp(2πβ)/1550\$", lw=2)
+        # Plots.plot!(p, xx, exp.(1.628./sqrt.(1 ./xx .−0.509).-1.9), label="\$\\exp(\\frac{1.628}{\\sqrt{T −0.509}}-1.9)\$",ylim=(Exp_vect[end], Exp_vect[1]), linecolor =:orange, markercolor =:orange, lw=2)
+        # display(p)
         return critic_exp, critic_pow
     end
 end
 
-function linear_fit(x::Vector, p::Vector{Float64}) # linear function
+function ξ_vs_T(pal::PlotUtils.ContinuousColorGradient, L::Vector{Int64}, D_for_L::Dict{Int64, Vector{Float32}}, T_for_LD::Dict{Tuple{Int64, Float32}, Vector{Float32}}, Corr::Array{Vector{Float32}, 3}, ll::Int64, allD::String="")
+    p1 = Plots.plot(xaxis="Temperature", yaxis="Correlation length")
+    if allD==""; D = D_for_L[ll]
+    elseif allD=="ising" || allD =="Ising"; D = [x for x in D_for_L[ll] if -0.5 < x < 0]; pal2 = cgrad([RGB(.5,.5,1), RGB(0,0,.2)], length(D), categorical=true)
+    elseif allD=="xy" || allD=="XY"; D = [x for x in D_for_L[ll] if 0 <= x]; pal2 = cgrad([RGB(0.2,0,0), RGB(1,.5,.5)], length(D), categorical=true)
+    end
+    for d in 1:length(D)
+        dd = D[d]
+        n = PlotcolorD(dd, D[1], D[end])
+        Exp_vect = []; Exp_err_vect = []
+        for tt in T_for_LD[(ll, dd)]
+            Exp, Exp_err = corrlength(Corr, T_for_LD, L, D_for_L, ll, dd, tt, false, false)
+            push!(Exp_vect, Exp)
+            push!(Exp_err_vect, Exp_err)
+        end
+        if allD==""; Plots.plot!(p1, T_for_LD[ll,dd], Exp_vect, yerr=Exp_err_vect, label="", linecolor = pal[n], markercolor = pal[n], xlim=(0.48,1.08))
+        else Plots.plot!(p1, T_for_LD[ll,dd], Exp_vect, yerr=Exp_err_vect, label=dd, linecolor = pal2[d], markercolor = pal2[d])#, xlim=(.57,.88), ylim=(2,45))
+        end
+    end
+    if allD==""
+        p2 = Plots.plot(load("Colorbar.png"), framestyle = :none, axis = nothing)
+        display(Plots.plot(p1, p2, layout= @layout [a{.84w} b{.16w}]))
+    else; display(p1)
+    end
+end
+
+function linear_fit(x::Vector, p::Vector) # linear function
     return p[1]*x .+ p[2]
 end
 
@@ -494,15 +460,15 @@ function Gauss_fit(x::Vector{Float32}, p::Vector{Float64})
 end
 
 function fit_C(x::Vector{Int64}, p::Vector{Float64})       # a * ln(L/L0)(1+L'/L)
-    return p[1]*log.(x/p[2]).*(1 .+ p[3]./x)
-end
-
-function fit_C2(x::Vector{Int64}, p::Vector{Float64})       # a * ln(L/L0)(1+L'/L)
     return p[1]*log.(x) .+p[2] .+ p[3]./x
 end
 
 function exp_plus(x::Vector{Int64}, p::Vector{Float64})       # a * ln(L/L0)(1+L'/L)
     return exp.(-x/p[1]) .+p[2]
+end
+
+function fit_Heisenberg_χ(L::Vector{Int64}, p::Vector{Float64})    # a * L ^ b
+    return L.^p[1].*log.(L*80).^(-2) #L.^p[1].*log.(L*p[3]).^p[2]
 end
 
 function colorbar(pal::PlotUtils.ContinuousColorGradient, D_for_L::Dict{Int64, Vector{Float32}})    #   Make the wanted colorbar requires other packages. The colorbar is then saved and combined with the plot
@@ -537,7 +503,7 @@ end
 function scaling_plot_χ_Ising(L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D_for_L::Dict{Int64, Vector{Float32}}, χ::Array{Float32, 3}, Dvalue::Real, Tpic::Dict{Tuple{Int64, Float32}, Float32}, error::Array{Float32, 3}, fitpower::Dict{Float32, Tuple{Vector{Float64}, Vector{Float64}}})
     Dvalue = Float32(Dvalue)
     pal = cgrad([RGB(.3,1,.3), RGB(.3,.3, 1), RGB(1,.3,.3)], length(L), categorical = true)
-    p=Plots.plot(framestyle = :box)
+    p=Plots.plot()
     pow  = fitpower[Float32(Dvalue)][1][1]
     Δpow = fitpower[Float32(Dvalue)][2][1]
     for l in eachindex(L)
@@ -558,7 +524,7 @@ end
 function scaling_plot_C_XY(L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D_for_L::Dict{Int64, Vector{Float32}}, C::Array{Float32, 3}, Dvalue::Real, Tpic::Dict{Tuple{Int64, Float32}, Float32}, error::Array{Float32, 3})
     Dvalue = Float32(Dvalue)
     pal = cgrad([RGB(.3,1,.3), RGB(.3,.3, 1), RGB(1,.3,.3)], length(L), categorical = true)
-    p=Plots.plot(framestyle = :box)
+    p=Plots.plot()
     for l in eachindex(L)
         ll = L[l]
         if haskey(T_for_LD, (ll, Dvalue))
@@ -578,7 +544,7 @@ end
 function scaling_plot_χ_XY(L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D_for_L::Dict{Int64, Vector{Float32}}, χ::Array{Float32, 3}, Dvalue::Real, Tpic::Dict{Tuple{Int64, Float32}, Float32}, error::Array{Float32, 3}, fitpower::Dict{Float32, Tuple{Vector{Float64}, Vector{Float64}}})
     Dvalue = Float32(Dvalue)
     pal = cgrad([RGB(.3,1,.3), RGB(.3,.3, 1), RGB(1,.3,.3)], length(L), categorical = true)
-    p=Plots.plot(framestyle = :box)
+    p=Plots.plot()
     pow  = fitpower[Float32(Dvalue)][1][1]
     Δpow = fitpower[Float32(Dvalue)][2][1]
     for l in eachindex(L)
@@ -596,8 +562,32 @@ function scaling_plot_χ_XY(L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64, Float3
     display(p)
 end
 
+function scaling_plot_χ_Heisenberg(L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D_for_L::Dict{Int64, Vector{Float32}}, χ::Array{Float32, 3}, Dvalue::Real, Tpic::Dict{Tuple{Int64, Float32}, Float32}, error::Array{Float32, 3}, χmax::Dict{Tuple{Int64, Float32}, Float32})
+    Dvalue = Float32(Dvalue)
+    L_for_D = sort([k for (k, v) in pairs(D_for_L) if Dvalue ∈ v])
+    vect_χmax = [χmax[i,Dvalue] for i in L_for_D]
+    FIT=curve_fit(fit_Heisenberg_χ, L_for_D, vect_χmax, [2.])#, -2.,50.])
+    pow = coef(FIT)[1]#, powln, L0 = coef(FIT)
+    Δpow = stderror(FIT)[1]
+    pal = cgrad([RGB(.3,1,.3), RGB(.3,.3, 1), RGB(1,.3,.3)], length(L), categorical = true)
+    p=Plots.plot()
+    for l in eachindex(L)
+        ll = L[l]
+        if haskey(T_for_LD, (ll, Dvalue))
+            T = T_for_LD[ll, Dvalue]
+            endT = length(T)
+            d = findfirst(==(Dvalue), D_for_L[ll])
+            Plots.plot!((T.-Tpic[ll, Dvalue])*ll, χ[l, 1:endT,d]*ll.^(-pow)*log.(ll*80).^2, yerr = error[l,1:endT,d]*ll^(-pow), label=ll, seriescolor = pal[l], linecolor = pal[l], markercolor = pal[l], markerstrokecolor = pal[l], ecolor = pal[l])
+        end
+    end
+    # Plots.title!(p, "\$\\chi\$, with D = $Dvalue")
+    Plots.xlabel!(p, raw"$(T-Tc(L))\cdot L$")
+    Plots.ylabel!(p, raw"$\chi \cdot L^{-"*nice_result(pow, Δpow)*"} \\cdot \\ln^2(80\\, L)\$") # Plots.ylabel!(p, raw"$\chi \cdot L^{-$"*nice_result(pow, Δpow)*raw"$}$\cdot ln^{-$"*nice_result(powln, Δpowln)*raw"$}(L/$"*nice_result(L0, ΔL0)*raw"$)$")
+    display(p)
+end
+
 function LogLogPlotAndFit(x::Vector, y::Vector, guess::Vector, xax::String, yax::String, lab::String)
-    P=Plots.plot(framestyle = :box)
+    P=Plots.plot()
     xlog = log.(x)
     ylog = log.(y)
     # yy = round.(y;digits=1)
@@ -695,11 +685,3 @@ function Convergence_check(L::Vector{Int64}, FolderName::String="", ll::Int64=0)
     end
     return conv
 end
-
-# α : specific heat                     Ising : 0       XY : NOP Essential singularity
-# β : zero field mag                    Ising : 1/8     XY : NOP No magnetization (To have a nonzero 𝑀, the correlation function must approach a constant at large distance. But in the 2D XY model: For 𝑇>𝑇BKT: correlations decay exponentially. For 𝑇<𝑇BKT: correlations decay as a power law)
-# γ : zero field isothermal suscxx      Ising : 7/4     XY : NOP Essential divergence
-# δ : Critical isothermal               Ising : 15      XY : 15
-# ν : corr length                       Ising : 1       XY : NOP 𝜉 diverges exponentially
-
-# continuous symmetries cannot be spontaneously broken in 2D

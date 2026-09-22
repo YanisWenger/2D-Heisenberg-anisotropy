@@ -134,7 +134,7 @@ function IsingClusterUpdate(ZLattice::AbstractArray{Float32, 2}, L::Int, T::Floa
     @inbounds while Head < Tail
         i, j = queue[Head]
         Head += 1
-        neighbors = ((i==1 ? L : i-1,j), (i,j==1 ? L : j-1), (i==L ? 1 : i+1,j), (i,j==L ? 1 : j+1))    # The four neighbors (could be optimized using a?b:c instead of mod)
+        neighbors = ((i==1 ? L : i-1,j), (i,j==1 ? L : j-1), (i==L ? 1 : i+1,j), (i,j==L ? 1 : j+1))    # The four neighbors
         cos_site = cos(ZLattice[i,j])
         for n=1:4               # To check the four neighbors
             ki,kj = neighbors[n]
@@ -154,13 +154,13 @@ function IsingClusterUpdate(ZLattice::AbstractArray{Float32, 2}, L::Int, T::Floa
 end
 
 function MHStep(step::Int, lat::Matrix{SVector{2, Float32}}, T::Float32, L::Int, D::Float32, σ::Float32, σϕ::Float32, σθ::Float32, Acceptance::Vector{Int64}, Try::Vector{Int64}, Cluster_update::Int64, rng::AbstractRNG)   # ful MH step: i.e. lattice sweep or Wolff algorithm, and (potentially) adjust the three σ for the three gaussian proposal to be closer to the optimal acceptance rate
-    Mz2 = Mag_z2(getindex.(lat, 2), L)  # quantifies how much spins are aligned along z
-    IsingProba_Mz2 = IsingProba(Mz2)
-    if mod(step,100)==0 && IsingProba_Mz2 > 0 && IsingProba_Mz2 > rand(rng) # the second condition is mathematically useless because of the third, but it is faster like so as it doesn't generate random number if Probability is 0
+    AbsMz = AbsMagz(getindex.(lat, 2), L)  # quantifies how much spins are aligned along z
+    IsingProba_AbsMz = IsingProba(AbsMz)
+    if mod(step,100)==0 && IsingProba_AbsMz > 0 && IsingProba_AbsMz > rand(rng) # the second condition is mathematically useless because of the third, but it is faster like so as it doesn't generate random number if Probability is 0
         lat = SVector{2,Float32}.(getindex.(lat, 1),    IsingClusterUpdate(getindex.(lat, 2), L, T, rng))    # Wolff algorithm
         Cluster_update += 1
     else
-        lat, Accept, Tr = LatticeSweep(lat, L, T, σ, σϕ, σθ, D, IsingProba_Mz2, XYProba(Mz2), rng)
+        lat, Accept, Tr = LatticeSweep(lat, L, T, σ, σϕ, σθ, D, IsingProba_AbsMz, XYProba(AbsMz), rng)
         @fastmath begin
             if Tr[1] > 10
                 σ = min(max(σ*2.86f0*Accept[1]/Tr[1], 1/sqrt(step+1000)), 10)     # if the acceptance is higher (lower) than .35, sigma should increase (decreased) to explore more (less) the phase space to get closer to .35
@@ -204,7 +204,7 @@ function MH(N::Int64, T::Float32, L::Int, D::Float32, burn::Int, Skip)     # Sam
     corr /= Nmeasurement
     accept = Acceptance ./ Try
     @save "Data/[$L]_$N/$(L)_$(T)_$D.jld2" Energies Mx=Mag[:,1] My=Mag[:,2] Mz=Mag[:,3] corr accept
-    println("$L \t $D \t $T \t $(round.(accept; digits=3)) \t and Magz2 : $(round(Mag_z2(getindex.(lat, 2), L); digits=3)) \t $(Cluster_update)")
+    println("$L \t $D \t $T \t $(round.(accept; digits=3)) \t and AbsMagz : $(round(AbsMagz(getindex.(lat, 2), L); digits=3)) \t $(Cluster_update)")
     return Energies[end]
 end
 
@@ -242,16 +242,16 @@ function mag(Lattice::Array{SVector{2,Float32},2}, L::Int64)    # Compute the ma
     return [X, Y, Z]/L^2
 end
 
-function Mag_z2(ZLattice::Array{Float32,2}, L::Int64)   # Compute the sum(S_z^2), to check how how much the spin are align along the z-direction
-    return sum(x -> cos(x)^2, ZLattice)/(L*L)
+function AbsMagz(ZLattice::Array{Float32,2}, L::Int64)   # Compute the sum(S_z^2), to check how how much the spin are align along the z-direction
+    return sum(x -> abs(cos(x)), ZLattice)/(L*L)
 end
 
-@inline @fastmath function IsingProba(Mz2::Float32)   # Probability of Ising-flip, just a choice, there is no perfect one
-    return (1.9f0*Mz2 -.95f0)^2 *(sign(Mz2 - .5f0)+1)/2
+@inline @fastmath function IsingProba(AbsMz::Float32)   # Probability of Ising-flip, just a choice, there is no perfect one
+    return (1.8f0*AbsMz -.9f0)^4 *(sign(AbsMz - .5f0)+1)/2
 end
 
-@inline @fastmath function XYProba(Mz2::Float32)      # Probability of XY-flip (either phi or theta, independently): useful to converge faster for XY config as σϕ and σθ are tuned independently, to really have θ very close to π/2
-    return (.9f0 - 9f0*Mz2)^2 *(sign(.1f0 -Mz2)+1)/2
+@inline @fastmath function XYProba(AbsMz::Float32)      # Probability of XY-flip (either phi or theta, independently): useful to converge faster for XY config as σϕ and σθ are tuned independently, to really have θ very close to π/2
+    return (.9f0 - 1.8f0*AbsMz)^4 *(sign(.5f0 - AbsMz)+1)/2
 end # just a choice, there is no perfect one
 
 #    ----    get variables    ----    #
