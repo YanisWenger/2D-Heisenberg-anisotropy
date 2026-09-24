@@ -76,7 +76,7 @@ function plotL(L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64, Float32}, Vector{Fl
     display(p)
 end
 
-function plotD(pal::PlotUtils.ContinuousColorGradient, L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D_for_L::Dict{Int64, Vector{Float32}}, x::Array{Float32, 3}, ytitle::String="", error=[], l::Int64=length(x[:,1,1]), save::Bool=false)   # read data from a file and plot it vs D
+function plotD(pal::PlotUtils.ContinuousColorGradient, L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D_for_L::Dict{Int64, Vector{Float32}}, x::Array{Float32, 3}, shift::Bool, ytitle::String="", error=[], l::Int64=length(x[:,1,1]), save::Bool=false)   # read data from a file and plot it vs D
     p2 = Plots.plot(load("Colorbar.png"), framestyle = :none, axis = nothing)
     p1 = Plots.plot()
     ll=L[l]; 
@@ -84,15 +84,19 @@ function plotD(pal::PlotUtils.ContinuousColorGradient, L::Vector{Int64}, T_for_L
     # if ytitle=="C"; lim=(max(0, minimum(x[l,:,:])),maximum(x[l,3:end,:]))
     #=else;=# lim = :auto
     # end
-    for d in eachindex(D)
+    for d = length(D):-1:1
         dd = D[d]
         rescaleE=0          # To rescale the Energy (only when y = Energy)
         if ytitle=="E" && dd<0; rescaleE = dd; end
         n = PlotcolorD(dd, D[1], D[end])
         T = T_for_LD[(ll, dd)]
         endT=length(T)
-        if error != [] 
-            Plots.plot!(T, x[l, 1:endT, d].-rescaleE, yerr = Vector(error[l, 1:endT, d]), label=""#=$(dd)=#, ylims=lim, seriescolor = pal[n], linecolor = pal[n], markercolor = pal[n], markerstrokecolor = pal[n], ecolor = pal[n])#, seriestype=:scatter, ms=3)
+        if error != []
+            if shift
+                Plots.plot!(T, x[l, 1:endT, d].-rescaleE.+d*.2, yerr = Vector(error[l, 1:endT, d]), label=""#=$(dd)=#, ylims=lim, seriescolor = pal[n], linecolor = pal[n], markercolor = pal[n], markerstrokecolor = pal[n], ecolor = pal[n], yticks=([0,1,2,3,4,5,6,7], ["","","","","",""]), fill=(minimum(x[l, 1:endT, d])+d*.2, :white), fillalpha=1)#, seriestype=:scatter, ms=3)
+            else
+                Plots.plot!(T, x[l, 1:endT, d].-rescaleE, yerr = Vector(error[l, 1:endT, d]), label=""#=$(dd)=#, ylims=lim, seriescolor = pal[n], linecolor = pal[n], markercolor = pal[n], markerstrokecolor = pal[n], ecolor = pal[n])#, seriestype=:scatter, ms=3)
+            end
         else
             Plots.plot!(T, x[l, 1:endT, d].-rescaleE, label=""#=$(dd)=#, seriescolor = pal[n])#, seriestype=:scatter, ms=3)
         end
@@ -261,10 +265,10 @@ function Plot_Max_C_Χ(pal::PlotUtils.ContinuousColorGradient, D_for_L::Dict{Int
         end
         Plots.plot!(D_for_L[ll], [Tmax[ll,i] for i in D_for_L[ll]], seriestype=:scatter, label=ll, yerr=[Tmaxerr[ll,i] for i in D_for_L[ll]], seriescolor=pal_L[l])
     end
-    Plots.title!("Tpic of $title vs D")
+    Plots.title!("Tpeak of $title vs D")
     Plots.ylabel!("Temperature of the maximum of $title")
     Plots.xlabel!("⬅ Ising                Value of D                XY ➡")
-    if save; Plots.savefig("Plot/Tpic_$title.pdf"); end
+    if save; Plots.savefig("Plot/Tpeak_$title.pdf"); end
     display(p)
     p=Plots.plot()
     for l in eachindex(L)
@@ -299,15 +303,15 @@ function Plot_Max_C_Χ(pal::PlotUtils.ContinuousColorGradient, D_for_L::Dict{Int
             fit_Tc[dd] = (coef(fitTc), stderror(fitTc))
             Plots.plot!(x, coef(fitTc)[3]*x.^coef(fitTc)[1].+coef(fitTc)[2], seriescolor=pal[n[dd]], label="")
         catch
-            println("can't fit D = $dd")
+            # println("can't fit D = $dd")
         end
         Plots.plot!(L_for_D, vect_Tmax, seriestype=:scatter, seriescolor=pal[n[dd]], label="", yerr=vect_Tmaxerr)
     end
-    Plots.title!("Tpic of $title vs L")
+    Plots.title!("Tpeak of $title vs L")
     Plots.ylabel!("Temperature of the maximum of $title")
     Plots.xlabel!("Lattice length")
     p=Plots.plot(p1, p2, layout= @layout [a{.84w} b{.16w}])
-    if save; Plots.savefig("Plot/TpicvsL_$title.pdf"); end
+    if save; Plots.savefig("Plot/TpeakvsL_$title.pdf"); end
     display(p)
 
     p1=Plots.plot()
@@ -419,7 +423,7 @@ function ξ_vs_T(pal::PlotUtils.ContinuousColorGradient, L::Vector{Int64}, D_for
     elseif allD=="ising" || allD =="Ising"; D = [x for x in D_for_L[ll] if -0.5 < x < 0]; pal2 = cgrad([RGB(.5,.5,1), RGB(0,0,.2)], length(D), categorical=true)
     elseif allD=="xy" || allD=="XY"; D = [x for x in D_for_L[ll] if 0 <= x]; pal2 = cgrad([RGB(0.2,0,0), RGB(1,.5,.5)], length(D), categorical=true)
     end
-    for d in 1:length(D)
+    for d in length(D):-1:1
         dd = D[d]
         n = PlotcolorD(dd, D[1], D[end])
         Exp_vect = []; Exp_err_vect = []
@@ -428,7 +432,7 @@ function ξ_vs_T(pal::PlotUtils.ContinuousColorGradient, L::Vector{Int64}, D_for
             push!(Exp_vect, Exp)
             push!(Exp_err_vect, Exp_err)
         end
-        if allD==""; Plots.plot!(p1, T_for_LD[ll,dd], Exp_vect, yerr=Exp_err_vect, label="", linecolor = pal[n], markercolor = pal[n], xlim=(0.48,1.08))
+        if allD==""; Plots.plot!(p1, T_for_LD[ll,dd], Exp_vect.+d, yerr=Exp_err_vect, label="", linecolor = pal[n], markercolor = pal[n], xlim=(0.48,1.08), fill=(minimum(Exp_vect)+d, :white), fillalpha=1)
         else Plots.plot!(p1, T_for_LD[ll,dd], Exp_vect, yerr=Exp_err_vect, label=dd, linecolor = pal2[d], markercolor = pal2[d])#, xlim=(.57,.88), ylim=(2,45))
         end
     end
@@ -447,11 +451,11 @@ function ln_fit(x::Vector{Int64}, p::Vector{Float64})       # a * ln(x) + b
     return p[1]*log.(x) .+ p[2]
 end
 
-function power_fit(L::Vector{Int64}, p::Vector{Float64})    # a * L ^ b
+function power_fit(L::Vector{Int64}, p::AbstractVector{<:Real})    # a * L ^ b
     return p[2]*L.^p[1]
 end
 
-function power_fit_plus(L::Vector{Int64}, p::Vector{Float64})  # a * L ^ b + c
+function power_fit_plus(L::Vector{Int64}, p::AbstractVector{<:Real})  # a * L ^ b + c
     return p[3]*L.^p[1].+p[2]
 end
 
@@ -459,7 +463,7 @@ function Gauss_fit(x::Vector{Float32}, p::Vector{Float64})
     return p[3]*exp.(-((x .-p[1])/p[2]).^2) .+p[4]
 end
 
-function fit_C(x::Vector{Int64}, p::Vector{Float64})       # a * ln(L/L0)(1+L'/L)
+function fit_C(x::Vector{Int64}, p::AbstractVector{<:Real})       # a * ln(L/L0)(1+L'/L)
     return p[1]*log.(x) .+p[2] .+ p[3]./x
 end
 
@@ -467,7 +471,7 @@ function exp_plus(x::Vector{Int64}, p::Vector{Float64})       # a * ln(L/L0)(1+L
     return exp.(-x/p[1]) .+p[2]
 end
 
-function fit_Heisenberg_χ(L::Vector{Int64}, p::Vector{Float64})    # a * L ^ b
+function fit_Heisenberg_χ(L::Vector{Int64}, p::AbstractVector{<:Real})    # a * L ^ b
     return L.^p[1].*log.(L*80).^(-2) #L.^p[1].*log.(L*p[3]).^p[2]
 end
 
@@ -479,7 +483,7 @@ function colorbar(pal::PlotUtils.ContinuousColorGradient, D_for_L::Dict{Int64, V
     Makie.save("Colorbar.png", fig; px_per_unit = 8)
 end
 
-function scaling_plot_C_Ising(L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D_for_L::Dict{Int64, Vector{Float32}}, C::Array{Float32, 3}, Dvalue::Real, Tpic::Dict{Tuple{Int64, Float32}, Float32}, error::Array{Float32, 3}, FIT::Dict{Float32, Tuple{Vector{Float64}, Vector{Float64}}})
+function scaling_plot_C_Ising(L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D_for_L::Dict{Int64, Vector{Float32}}, C::Array{Float32, 3}, Dvalue::Real, Tpeak::Dict{Tuple{Int64, Float32}, Float32}, error::Array{Float32, 3}, FIT::Dict{Float32, Tuple{Vector{Float64}, Vector{Float64}}})
     Dvalue = Float32(Dvalue)
     pal = cgrad([RGB(.3,1,.3), RGB(.3,.3, 1), RGB(1,.3,.3)], length(L), categorical = true)
     p=Plots.plot()
@@ -491,7 +495,7 @@ function scaling_plot_C_Ising(L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64, Floa
             T = T_for_LD[ll, Dvalue]
             endT = length(T)
             d = findfirst(==(Dvalue), D_for_L[ll])
-            Plots.plot!((T.-Tpic[ll, Dvalue])*ll, (C[l, 1:endT,d] .-Lprime/ll)/log(ll/L0), yerr = error[l,1:endT,d]/log(ll), label=ll, seriescolor = pal[l], linecolor = pal[l], markercolor = pal[l], markerstrokecolor = pal[l], ecolor = pal[l])
+            Plots.plot!((T.-Tpeak[ll, Dvalue])*ll, (C[l, 1:endT,d] .-Lprime/ll)/log(ll/L0), yerr = error[l,1:endT,d]/log(ll), label=ll, seriescolor = pal[l], linecolor = pal[l], markercolor = pal[l], markerstrokecolor = pal[l], ecolor = pal[l])
         end
     end
     # Plots.title!(p, "C, with D = $Dvalue")
@@ -500,7 +504,7 @@ function scaling_plot_C_Ising(L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64, Floa
     display(p)
 end
 
-function scaling_plot_χ_Ising(L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D_for_L::Dict{Int64, Vector{Float32}}, χ::Array{Float32, 3}, Dvalue::Real, Tpic::Dict{Tuple{Int64, Float32}, Float32}, error::Array{Float32, 3}, fitpower::Dict{Float32, Tuple{Vector{Float64}, Vector{Float64}}})
+function scaling_plot_χ_Ising(L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D_for_L::Dict{Int64, Vector{Float32}}, χ::Array{Float32, 3}, Dvalue::Real, Tpeak::Dict{Tuple{Int64, Float32}, Float32}, error::Array{Float32, 3}, fitpower::Dict{Float32, Tuple{Vector{Float64}, Vector{Float64}}})
     Dvalue = Float32(Dvalue)
     pal = cgrad([RGB(.3,1,.3), RGB(.3,.3, 1), RGB(1,.3,.3)], length(L), categorical = true)
     p=Plots.plot()
@@ -512,16 +516,16 @@ function scaling_plot_χ_Ising(L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64, Flo
             T = T_for_LD[ll, Dvalue]
             endT = length(T)
             d = findfirst(==(Dvalue), D_for_L[ll])
-            Plots.plot!((T.-Tpic[ll, Dvalue])*ll, χ[l, 1:endT,d]*ll.^(-pow), yerr = error[l,1:endT,d]*ll^(-7/4), label=ll, seriescolor = pal[l], linecolor = pal[l], markercolor = pal[l], markerstrokecolor = pal[l], ecolor = pal[l])
+            Plots.plot!((T.-Tpeak[ll, Dvalue])*ll, χ[l, 1:endT,d]*ll.^(-pow), yerr = error[l,1:endT,d]*ll^(-7/4), label=ll, seriescolor = pal[l], linecolor = pal[l], markercolor = pal[l], markerstrokecolor = pal[l], ecolor = pal[l])
         end
     end
     # Plots.title!(p, "\$\\chi\$, with D = $Dvalue")
-    Plots.xlabel!(p, raw"$(T-Tc(L))\cdotL$")
+    Plots.xlabel!(p, raw"$(T-Tc(L))\cdot L$")
     Plots.ylabel!(p, raw"$\chi \cdot L^{-"*nice_result(pow, Δpow)*"}\$")
     display(p)
 end
 
-function scaling_plot_C_XY(L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D_for_L::Dict{Int64, Vector{Float32}}, C::Array{Float32, 3}, Dvalue::Real, Tpic::Dict{Tuple{Int64, Float32}, Float32}, error::Array{Float32, 3})
+function scaling_plot_C_XY(L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D_for_L::Dict{Int64, Vector{Float32}}, C::Array{Float32, 3}, Dvalue::Real, Tpeak::Dict{Tuple{Int64, Float32}, Float32}, error::Array{Float32, 3})
     Dvalue = Float32(Dvalue)
     pal = cgrad([RGB(.3,1,.3), RGB(.3,.3, 1), RGB(1,.3,.3)], length(L), categorical = true)
     p=Plots.plot()
@@ -531,8 +535,8 @@ function scaling_plot_C_XY(L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64, Float32
             T = T_for_LD[ll, Dvalue]
             endT = length(T)
             d = findfirst(==(Dvalue), D_for_L[ll])
-            # Plots.plot!((T.-Tpic[ll, Dvalue])*ll, χ[l, 1:endT,d]*ll.^(-7/4), yerr = error[l,1:endT,d]*ll^(-7/4), label=ll, seriescolor = pal[l], linecolor = pal[l], markercolor = pal[l], markerstrokecolor = pal[l], ecolor = pal[l])
-            Plots.plot!(T.-Tpic[ll, Dvalue], C[l, 1:endT,d], yerr = error[l,1:endT,d]*ll^(-7/4), label=ll, seriescolor = pal[l], linecolor = pal[l], markercolor = pal[l], markerstrokecolor = pal[l], ecolor = pal[l])
+            # Plots.plot!((T.-Tpeak[ll, Dvalue])*ll, χ[l, 1:endT,d]*ll.^(-7/4), yerr = error[l,1:endT,d]*ll^(-7/4), label=ll, seriescolor = pal[l], linecolor = pal[l], markercolor = pal[l], markerstrokecolor = pal[l], ecolor = pal[l])
+            Plots.plot!(T.-Tpeak[ll, Dvalue], C[l, 1:endT,d], yerr = error[l,1:endT,d]*ll^(-7/4), label=ll, seriescolor = pal[l], linecolor = pal[l], markercolor = pal[l], markerstrokecolor = pal[l], ecolor = pal[l])
         end
     end
     # Plots.title!(p, "C, with D = $Dvalue")
@@ -541,7 +545,7 @@ function scaling_plot_C_XY(L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64, Float32
     display(p)
 end
 
-function scaling_plot_χ_XY(L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D_for_L::Dict{Int64, Vector{Float32}}, χ::Array{Float32, 3}, Dvalue::Real, Tpic::Dict{Tuple{Int64, Float32}, Float32}, error::Array{Float32, 3}, fitpower::Dict{Float32, Tuple{Vector{Float64}, Vector{Float64}}})
+function scaling_plot_χ_XY(L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D_for_L::Dict{Int64, Vector{Float32}}, χ::Array{Float32, 3}, Dvalue::Real, Tpeak::Dict{Tuple{Int64, Float32}, Float32}, error::Array{Float32, 3}, fitpower::Dict{Float32, Tuple{Vector{Float64}, Vector{Float64}}})
     Dvalue = Float32(Dvalue)
     pal = cgrad([RGB(.3,1,.3), RGB(.3,.3, 1), RGB(1,.3,.3)], length(L), categorical = true)
     p=Plots.plot()
@@ -553,7 +557,7 @@ function scaling_plot_χ_XY(L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64, Float3
             T = T_for_LD[ll, Dvalue]
             endT = length(T)
             d = findfirst(==(Dvalue), D_for_L[ll])
-            x = T.-Tpic[ll, Dvalue]
+            x = T.-Tpeak[ll, Dvalue]
             Plots.plot!(sign.(x).*sqrt.(x.*sign.(x)).^3*ll, χ[l, 1:endT,d]*ll.^(-pow), yerr = error[l,1:endT,d]*ll^(-7/4), label=ll, seriescolor = pal[l], linecolor = pal[l], markercolor = pal[l], markerstrokecolor = pal[l], ecolor = pal[l], xlim = (-2.5,4.5))
         end
     end
@@ -562,10 +566,10 @@ function scaling_plot_χ_XY(L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64, Float3
     display(p)
 end
 
-function scaling_plot_χ_Heisenberg(L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D_for_L::Dict{Int64, Vector{Float32}}, χ::Array{Float32, 3}, Dvalue::Real, Tpic::Dict{Tuple{Int64, Float32}, Float32}, error::Array{Float32, 3}, χmax::Dict{Tuple{Int64, Float32}, Float32})
+function scaling_plot_χ_Heisenberg(L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64, Float32}, Vector{Float32}}, D_for_L::Dict{Int64, Vector{Float32}}, χ::Array{Float32, 3}, Dvalue::Real, Tpeak::Dict{Tuple{Int64, Float32}, Float32}, error::Array{Float32, 3}, χmax::Dict{Tuple{Int64, Float32}, Float32})
     Dvalue = Float32(Dvalue)
     L_for_D = sort([k for (k, v) in pairs(D_for_L) if Dvalue ∈ v])
-    vect_χmax = [χmax[i,Dvalue] for i in L_for_D]
+    vect_χmax = Float64.([χmax[i,Dvalue] for i in L_for_D])
     FIT=curve_fit(fit_Heisenberg_χ, L_for_D, vect_χmax, [2.])#, -2.,50.])
     pow = coef(FIT)[1]#, powln, L0 = coef(FIT)
     Δpow = stderror(FIT)[1]
@@ -577,7 +581,7 @@ function scaling_plot_χ_Heisenberg(L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64
             T = T_for_LD[ll, Dvalue]
             endT = length(T)
             d = findfirst(==(Dvalue), D_for_L[ll])
-            Plots.plot!((T.-Tpic[ll, Dvalue])*ll, χ[l, 1:endT,d]*ll.^(-pow)*log.(ll*80).^2, yerr = error[l,1:endT,d]*ll^(-pow), label=ll, seriescolor = pal[l], linecolor = pal[l], markercolor = pal[l], markerstrokecolor = pal[l], ecolor = pal[l])
+            Plots.plot!((T.-Tpeak[ll, Dvalue])*ll, χ[l, 1:endT,d]*ll.^(-pow)*log.(ll*80).^2, yerr = error[l,1:endT,d]*ll^(-pow), label=ll, seriescolor = pal[l], linecolor = pal[l], markercolor = pal[l], markerstrokecolor = pal[l], ecolor = pal[l])
         end
     end
     # Plots.title!(p, "\$\\chi\$, with D = $Dvalue")
@@ -586,18 +590,22 @@ function scaling_plot_χ_Heisenberg(L::Vector{Int64}, T_for_LD::Dict{Tuple{Int64
     display(p)
 end
 
-function LogLogPlotAndFit(x::Vector, y::Vector, guess::Vector, xax::String, yax::String, lab::String)
+function LogLogPlotAndFit(D_for_L::Dict{Int64, Vector{Float32}}, MAX::Dict{Tuple{Int64, Float32}, Float32}, Dvalue::Real, guess::Vector, xax::String, yax::String, lab::String)
+    Dvalue=Float32(Dvalue)
+    x = sort([k for (k, v) in pairs(D_for_L) if 0 ∈ v])
+    y = sort([MAX[ll,Dvalue] for ll in x])
     P=Plots.plot()
     xlog = log.(x)
     ylog = log.(y)
     # yy = round.(y;digits=1)
     # yy = Int.([2^j for j in trunc(log2(y[1])):1:trunc(log2(y[end]))])
     yy = [1, 3, 10, 30, 100, 300]
-    fit  = curve_fit(linear_fit, xlog, ylog, guess)
+    # fit  = curve_fit(linear_fit, xlog, ylog, guess)
+    fit = curve_fit(power_fit, x, y, guess)
     m, p = coef(fit)
     Δm, Δp = stderror(fit)
     Plots.plot!(xlog, ylog, label=" "*lab, seriestype=:scatter, xticks=(xlog, string.(x)), yticks=(log.(yy), string.(yy)))
-    Plots.plot!(xlog, xlog*m .+p, label = "\$\\propto L^{"*nice_result(m, Δm)*"}\$")
+    Plots.plot!(xlog, xlog*m .+log(p), label = "\$\\propto L^{"*nice_result(m, Δm)*"}\$")
     Plots.xlabel!(xax)
     Plots.ylabel!(yax)
     display(P)

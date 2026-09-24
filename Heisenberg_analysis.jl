@@ -87,10 +87,10 @@ plotL(L, T_for_LD, D_for_L, E, 0, "Energy", EΔ)
 plotL(L, T_for_LD, D_for_L, C, 0f0, "Heat capacity", CΔ)
 
 
-plotD(PlotColors, L, T_for_LD, D_for_L, χ, "Susceptibility", χΔ, 9)   # Plot all the d for a given lattice size (last number for lattice size : L[#], the bigger one by default)
-plotD(PlotColors, L, T_for_LD, D_for_L, C, "Heat capacity", CΔ, 9)
-plotD(PlotColors, L, T_for_LD, D_for_L, E, "Energy", EΔ, 7)
-plotD(PlotColors, L, T_for_LD, D_for_L, M, "Magnetization", MΔ,7)
+plotD(PlotColors, L, T_for_LD, D_for_L, χ, true, "Susceptibility", χΔ, 7)   # Plot all the d for a given lattice size (last number for lattice size : L[#], the bigger one by default)
+plotD(PlotColors, L, T_for_LD, D_for_L, C, false, "Heat capacity", CΔ, 7)
+plotD(PlotColors, L, T_for_LD, D_for_L, E, false, "Energy", EΔ, 7)
+plotD(PlotColors, L, T_for_LD, D_for_L, M, false, "Magnetization", MΔ,7)
 
 Plots.savefig("Plot/M_100.pdf")
 
@@ -165,7 +165,7 @@ Plots.savefig("Plot/Susc_XY_rescaled.pdf")
 
 # fit corrlength (see where critical length diverges)
 
-LogLogPlotAndFit(L, [χmax[l,0] for l in L], [1.75, .7], "Lattice length", "Maximum of susceptibility","\$\\chi_{max}\$")
+LogLogPlotAndFit(D_for_L, χmax, 0, [1.75, .7], "Lattice length", "Maximum of susceptibility","\$\\chi_{max}\$")
 LogLogPlotAndFit(L, [Cmax[l,0] for l in L], [1.75, .7], "Lattice length", "Maximum of heat capacity","\$C_{max}\$")
 xlogPlotAndFit(L, [Cmax[l,-1000] for l in L], [1.75, .7])
 
